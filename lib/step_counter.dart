@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:pedometer/pedometer.dart'; // reads step sensor
-import 'package:permission_handler/permission_handler.dart'; // handles permissions
+import 'package:pedometer/pedometer.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'goal_settings_screen.dart';
@@ -16,10 +16,9 @@ class StepCounter extends StatefulWidget {
 
 class _StepCounterState extends State<StepCounter> {
 
-  int _initialSteps = 0;   // starting sensor value
-  int _currentSteps = 0;   // today's steps
-
-  int _goal = 10000;       // default goal
+  int _initialSteps = 0;
+  int _currentSteps = 0;
+  int _goal = 10000;
 
   StreamSubscription<StepCount>? _stepSubscription;
 
@@ -31,22 +30,19 @@ class _StepCounterState extends State<StepCounter> {
 
   /// Initialize app
   Future<void> initialize() async {
-
-    await loadGoal();          // load saved goal
-    await loadSavedSteps();    // load previous steps
-    await checkDailyReset();   // reset if new day
-    await requestPermission(); // start sensor
+    await loadGoal();
+    await loadSavedSteps();
+    await checkDailyReset();
+    await requestPermission();
   }
 
   /// Load goal from storage
   Future<void> loadGoal() async {
-
     final prefs = await SharedPreferences.getInstance();
 
     setState(() {
       _goal = prefs.getInt("step_goal") ?? 10000;
     });
-
   }
 
   /// Reset steps if new day started
@@ -85,11 +81,9 @@ class _StepCounterState extends State<StepCounter> {
     _stepSubscription =
         Pedometer.stepCountStream.listen((StepCount event) async {
 
-          // first sensor reading
           if (_initialSteps == 0) {
 
             _initialSteps = event.steps;
-
             await StepStorage.saveInitialSteps(_initialSteps);
           }
 
@@ -120,20 +114,6 @@ class _StepCounterState extends State<StepCounter> {
     setState(() {});
   }
 
-  /// Manual reset
-  Future<void> resetSteps() async {
-
-    int newInitial = _initialSteps + _currentSteps;
-
-    await StepStorage.saveInitialSteps(newInitial);
-    await StepStorage.saveTodaySteps(0);
-
-    setState(() {
-      _initialSteps = newInitial;
-      _currentSteps = 0;
-    });
-  }
-
   /// Cancel sensor when screen closes
   @override
   void dispose() {
@@ -146,18 +126,19 @@ class _StepCounterState extends State<StepCounter> {
   Widget build(BuildContext context) {
 
     double progress = (_currentSteps / _goal).clamp(0.0, 1.0);
+    int percent = (progress * 100).toInt();
 
     return Scaffold(
 
-      backgroundColor: const Color(0xFFF2F5FF),
+      backgroundColor: const Color(0xFFF4F6FF),
 
       appBar: AppBar(
         title: const Text("Step Counter"),
         centerTitle: true,
+        elevation: 0,
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
 
-        /// Goal settings button
         actions: [
 
           IconButton(
@@ -172,7 +153,6 @@ class _StepCounterState extends State<StepCounter> {
                 ),
               );
 
-              // reload goal after returning
               loadGoal();
             },
           )
@@ -180,135 +160,155 @@ class _StepCounterState extends State<StepCounter> {
         ],
       ),
 
-      body: Padding(
-        padding: const EdgeInsets.all(20),
+      body: Center(
 
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
 
-          children: [
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
 
-            const Text(
-              "Today's Steps",
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w500,
+            children: [
+
+              const Text(
+                "Today's Steps",
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
 
-            const SizedBox(height: 40),
+              const SizedBox(height: 40),
 
-            /// Circular step progress
-            Stack(
-              alignment: Alignment.center,
+              /// Step progress circle
+              Container(
+                padding: const EdgeInsets.all(25),
 
-              children: [
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
 
-                /// background circle
-                SizedBox(
-                  width: 240,
-                  height: 240,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    )
+                  ],
+                ),
 
-                  child: CircularProgressIndicator(
-                    value: 1,
-                    strokeWidth: 14,
-                    valueColor: AlwaysStoppedAnimation(
-                      Colors.grey.shade300,
+                child: Stack(
+                  alignment: Alignment.center,
+
+                  children: [
+
+                    SizedBox(
+                      width: 220,
+                      height: 220,
+
+                      child: CircularProgressIndicator(
+                        value: progress,
+                        strokeWidth: 14,
+                        strokeCap: StrokeCap.round,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor:
+                        const AlwaysStoppedAnimation(Colors.blue),
+                      ),
                     ),
-                  ),
+
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+
+                      children: [
+
+                        const Icon(
+                          Icons.directions_walk,
+                          size: 48,
+                          color: Colors.blue,
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        Text(
+                          "$_currentSteps",
+                          style: const TextStyle(
+                            fontSize: 42,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+
+                        const Text(
+                          "steps",
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey,
+                          ),
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        Text(
+                          "$percent% completed",
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.blue,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        )
+
+                      ],
+                    )
+
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 40),
+
+              /// Goal card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 15,
+                      offset: const Offset(0, 6),
+                    )
+                  ],
                 ),
 
-                /// progress circle
-                SizedBox(
-                  width: 240,
-                  height: 240,
-
-                  child: CircularProgressIndicator(
-                    value: progress,
-                    strokeWidth: 14,
-                    strokeCap: StrokeCap.round,
-                    valueColor:
-                    const AlwaysStoppedAnimation(Colors.blue),
-                  ),
-                ),
-
-                /// step number
-                Column(
-                  mainAxisSize: MainAxisSize.min,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
 
                   children: [
 
                     const Icon(
-                      Icons.directions_walk,
-                      size: 50,
+                      Icons.flag,
                       color: Colors.blue,
                     ),
 
-                    const SizedBox(height: 10),
+                    const SizedBox(width: 10),
 
                     Text(
-                      "$_currentSteps",
+                      "Goal: $_goal steps",
                       style: const TextStyle(
-                        fontSize: 44,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-
-                    const Text(
-                      "steps",
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
 
                   ],
-                )
-
-              ],
-            ),
-
-            const SizedBox(height: 40),
-
-            /// Goal text
-            Text(
-              "Goal: $_goal steps",
-              style: const TextStyle(
-                fontSize: 18,
-                color: Colors.black54,
-              ),
-            ),
-
-            const SizedBox(height: 40),
-
-            /// Reset button
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-
-              child: ElevatedButton(
-
-                onPressed: resetSteps,
-
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
                 ),
+              )
 
-                child: const Text(
-                  "Reset Steps",
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.white,
-                  ),
-                ),
-
-              ),
-            )
-
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'step_storage.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -13,29 +12,27 @@ class HistoryScreen extends StatefulWidget {
 
 class _HistoryScreenState extends State<HistoryScreen> {
 
-  /// Stores last 7 days step history
   List<Map<String, dynamic>> stepHistory = [];
 
-  /// Weekly average steps
-  int weeklyAverage = 0;
-
-  /// Best day step count
+  int goal = 10000;
+  int totalSteps = 0;
   int bestDaySteps = 0;
-
-  /// Index of best day
   int bestDayIndex = 0;
 
-  /// Goal steps (loaded from settings)
-  int goal = 10000;
+  DateTime? startDate;
+  DateTime? endDate;
 
   @override
   void initState() {
     super.initState();
+
+    endDate = DateTime.now();
+    startDate = endDate!.subtract(const Duration(days: 6));
+
     loadGoal();
     loadHistory();
   }
 
-  /// Load goal from SharedPreferences
   Future<void> loadGoal() async {
 
     final prefs = await SharedPreferences.getInstance();
@@ -46,10 +43,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   }
 
-  /// Load last 7 days step data
+  /// FIXED FUNCTION
   Future<void> loadHistory() async {
 
-    final data = await StepStorage.getLast7DaysSteps();
+    if (startDate == null || endDate == null) return;
+
+    final data = await StepStorage.getStepsBetweenDates(
+      startDate!,
+      endDate!,
+    );
 
     int total = 0;
     int maxSteps = 0;
@@ -71,15 +73,66 @@ class _HistoryScreenState extends State<HistoryScreen> {
     setState(() {
 
       stepHistory = data;
-
-      weeklyAverage = data.isEmpty ? 0 : (total / data.length).round();
-
+      totalSteps = total;
       bestDaySteps = maxSteps;
-
       bestDayIndex = maxIndex;
 
     });
 
+  }
+
+  Future<void> pickDateRange() async {
+
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2023),
+      lastDate: DateTime.now(),
+    );
+
+    if (picked != null) {
+
+      int difference = picked.end.difference(picked.start).inDays;
+
+      if (difference > 9) {
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Maximum range is 10 days"),
+          ),
+        );
+
+        return;
+      }
+
+      setState(() {
+        startDate = picked.start;
+        endDate = picked.end;
+      });
+
+      loadHistory();
+    }
+  }
+
+  String formatDate(DateTime d) {
+
+    const months = [
+      "Jan","Feb","Mar","Apr","May","Jun",
+      "Jul","Aug","Sep","Oct","Nov","Dec"
+    ];
+
+    return "${months[d.month-1]} ${d.day}";
+  }
+
+  String formatVerticalDate(String date) {
+
+    DateTime d = DateTime.parse(date);
+
+    const months = [
+      "Jan","Feb","Mar","Apr","May","Jun",
+      "Jul","Aug","Sep","Oct","Nov","Dec"
+    ];
+
+    return "${months[d.month-1]} ${d.day}th";
   }
 
   @override
@@ -87,7 +140,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     return Scaffold(
 
-      backgroundColor: const Color(0xFFF2F5FF),
+      backgroundColor: const Color(0xFFF4F6FF),
 
       appBar: AppBar(
         title: const Text("Step History"),
@@ -96,7 +149,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         foregroundColor: Colors.white,
       ),
 
-      body: Padding(
+      body: SingleChildScrollView(
+
         padding: const EdgeInsets.all(20),
 
         child: Column(
@@ -105,224 +159,263 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
           children: [
 
-            /// TITLE
-            const Text(
-              "Last 7 Days Activity",
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
+            /// DATE RANGE SELECTOR
+            GestureDetector(
+
+              onTap: pickDateRange,
+
+              child: Container(
+
+                padding: const EdgeInsets.all(14),
+
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      blurRadius: 10,
+                      color: Colors.black.withOpacity(0.05),
+                    )
+                  ],
+                ),
+
+                child: Row(
+
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+                  children: [
+
+                    const Icon(Icons.date_range),
+
+                    Text(
+
+                      startDate == null
+                          ? "Select Date Range"
+                          : "${formatDate(startDate!)} - ${formatDate(endDate!)}",
+
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+
+                    ),
+
+                    const Icon(Icons.arrow_drop_down),
+
+                  ],
+
+                ),
+
               ),
+
             ),
 
             const SizedBox(height: 20),
+
+            /// SCROLL HINT
+            Container(
+
+              padding: const EdgeInsets.symmetric(vertical: 8),
+
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(10),
+              ),
+
+              child: const Row(
+
+                mainAxisAlignment: MainAxisAlignment.center,
+
+                children: [
+
+                  Icon(Icons.swipe, size: 16),
+
+                  SizedBox(width: 8),
+
+                  Text(
+                    "Swipe horizontally to view more days",
+                    style: TextStyle(fontSize: 13),
+                  ),
+
+                ],
+
+              ),
+
+            ),
+
+            const SizedBox(height: 15),
 
             /// GRAPH CARD
             Container(
 
               padding: const EdgeInsets.all(20),
 
-              height: 320,
-
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: const [
+                boxShadow: [
                   BoxShadow(
-                    blurRadius: 12,
-                    color: Colors.black12,
+                    blurRadius: 15,
+                    color: Colors.black.withOpacity(0.05),
                   )
                 ],
               ),
 
               child: stepHistory.isEmpty
+                  ? const Center(child: Text("No step data yet"))
 
-              /// SHOW MESSAGE IF NO DATA
-                  ? const Center(
-                child: Text(
-                  "No step data yet",
-                  style: TextStyle(fontSize: 16),
-                ),
-              )
+                  : SingleChildScrollView(
 
-              /// BAR GRAPH
-                  : BarChart(
+                scrollDirection: Axis.horizontal,
 
-                BarChartData(
+                child: SizedBox(
 
-                  alignment: BarChartAlignment.spaceAround,
+                  width: stepHistory.length * 80,
 
-                  maxY: 15000,
+                  height: 320,
 
-                  /// GOAL LINE
-                  extraLinesData: ExtraLinesData(
+                  child: BarChart(
 
-                    horizontalLines: [
+                    BarChartData(
 
-                      HorizontalLine(
+                      maxY: 15000,
 
-                        y: goal.toDouble(),
+                      gridData: FlGridData(
+                        drawVerticalLine: false,
+                      ),
 
-                        color: Colors.green,
+                      borderData: FlBorderData(show: false),
 
-                        strokeWidth: 2,
+                      barGroups:
+                      List.generate(stepHistory.length, (index) {
 
-                        dashArray: [6, 4],
+                        int steps = stepHistory[index]["steps"];
 
-                        label: HorizontalLineLabel(
-                          show: true,
-                          alignment: Alignment.topRight,
-                          labelResolver: (line) => "$goal Goal",
-                          style: const TextStyle(
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
+                        bool best = index == bestDayIndex;
+
+                        return BarChartGroupData(
+
+                          x: index,
+
+                          barRods: [
+
+                            BarChartRodData(
+
+                              toY: steps.toDouble(),
+
+                              width: 24,
+
+                              borderRadius: BorderRadius.circular(6),
+
+                              gradient: LinearGradient(
+                                colors: best
+                                    ? [Colors.orange, Colors.red]
+                                    : [Colors.blue, Colors.lightBlueAccent],
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                              ),
+
+                            )
+
+                          ],
+
+                        );
+
+                      }),
+
+                      titlesData: FlTitlesData(
+
+                        leftTitles: AxisTitles(
+
+                          sideTitles: SideTitles(
+
+                            showTitles: true,
+
+                            reservedSize: 40,
+
+                            getTitlesWidget: (value, meta) {
+
+                              if (value % 5000 != 0) {
+                                return const SizedBox();
+                              }
+
+                              return Text(
+                                "${(value / 1000).toInt()}k",
+                                style: const TextStyle(fontSize: 12),
+                              );
+
+                            },
+
                           ),
+
                         ),
 
-                      )
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
 
-                    ],
+                        topTitles: AxisTitles(
 
-                  ),
+                          sideTitles: SideTitles(
 
-                  /// GRID
-                  gridData: FlGridData(
-                    drawVerticalLine: false,
-                  ),
+                            showTitles: true,
 
-                  /// BARS
-                  barGroups: List.generate(stepHistory.length, (index) {
+                            getTitlesWidget: (value, meta) {
 
-                    int steps = stepHistory[index]["steps"];
+                              int index = value.toInt();
 
-                    bool isBestDay = index == bestDayIndex;
+                              if (index >= stepHistory.length) {
+                                return const SizedBox();
+                              }
 
-                    return BarChartGroupData(
+                              int steps = stepHistory[index]["steps"];
 
-                      x: index,
+                              return Text(
+                                steps.toString(),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              );
 
-                      barRods: [
-
-                        BarChartRodData(
-
-                          toY: steps.toDouble(),
-
-                          width: 20,
-
-                          borderRadius: BorderRadius.circular(6),
-
-                          /// GRADIENT BARS
-                          gradient: LinearGradient(
-
-                            colors: isBestDay
-                                ? [Colors.orange, Colors.red]
-                                : [Colors.blue, Colors.lightBlueAccent],
-
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
+                            },
 
                           ),
 
-                        )
+                        ),
 
-                      ],
+                        bottomTitles: AxisTitles(
 
-                    );
+                          sideTitles: SideTitles(
 
-                  }),
+                            showTitles: true,
 
-                  /// TITLES
-                  titlesData: FlTitlesData(
+                            reservedSize: 60,
 
-                    /// LEFT STEP VALUES
-                    leftTitles: const AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 40,
-                      ),
-                    ),
+                            getTitlesWidget: (value, meta) {
 
-                    /// HIDE RIGHT
-                    rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
+                              int index = value.toInt();
 
-                    /// TOP STEP COUNTS
-                    topTitles: AxisTitles(
+                              if (index >= stepHistory.length) {
+                                return const SizedBox();
+                              }
 
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 28,
+                              String label =
+                              formatVerticalDate(stepHistory[index]["date"]);
 
-                        getTitlesWidget: (value, meta) {
+                              return RotatedBox(
+                                quarterTurns: 3,
+                                child: Text(
+                                  label,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              );
 
-                          int index = value.toInt();
+                            },
 
-                          if (index >= stepHistory.length) {
-                            return const SizedBox();
-                          }
+                          ),
 
-                          int steps = stepHistory[index]["steps"];
-
-                          return Padding(
-
-                            padding: const EdgeInsets.only(bottom: 4),
-
-                            child: Text(
-                              steps.toString(),
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black54,
-                              ),
-                            ),
-
-                          );
-
-                        },
-
-                      ),
-
-                    ),
-
-                    /// BOTTOM DATE LABELS
-                    bottomTitles: AxisTitles(
-
-                      sideTitles: SideTitles(
-
-                        showTitles: true,
-
-                        reservedSize: 60,
-
-                        getTitlesWidget: (value, meta) {
-
-                          int index = value.toInt();
-
-                          if (index >= stepHistory.length) {
-                            return const SizedBox();
-                          }
-
-                          String date = stepHistory[index]["date"];
-
-                          DateTime d = DateTime.parse(date);
-
-                          const months = [
-                            "Jan","Feb","Mar","Apr","May","Jun",
-                            "Jul","Aug","Sep","Oct","Nov","Dec"
-                          ];
-
-                          String label =
-                              "${months[d.month - 1]}-${d.day}";
-
-                          /// VERTICAL TEXT (BOTTOM → TOP)
-                          return RotatedBox(
-                            quarterTurns: 3,
-                            child: Text(
-                              label,
-                              style: const TextStyle(fontSize: 10),
-                            ),
-                          );
-
-                        },
+                        ),
 
                       ),
 
@@ -330,102 +423,120 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
                   ),
 
-                  borderData: FlBorderData(show: false),
-
                 ),
 
-                /// CHART ANIMATION
-                swapAnimationDuration:
-                const Duration(milliseconds: 800),
-
-                swapAnimationCurve: Curves.easeOutCubic,
-
               ),
+
             ),
 
             const SizedBox(height: 30),
 
-            /// SUMMARY CARDS
-            Row(
+            /// TOTAL STEPS
+            Container(
 
-              children: [
+              padding: const EdgeInsets.all(20),
 
-                Expanded(
-                  child: summaryCard(
-                    "Weekly Avg",
-                    "$weeklyAverage",
-                    Icons.show_chart,
-                    Colors.blue,
+              decoration: BoxDecoration(
+                color: Colors.blue,
+                borderRadius: BorderRadius.circular(16),
+              ),
+
+              child: Column(
+
+                crossAxisAlignment: CrossAxisAlignment.start,
+
+                children: [
+
+                  const Text(
+                    "Total Steps in Selected Range",
+                    style: TextStyle(color: Colors.white70),
                   ),
-                ),
 
-                const SizedBox(width: 15),
+                  const SizedBox(height: 6),
 
-                Expanded(
-                  child: summaryCard(
-                    "Best Day",
-                    "$bestDaySteps",
-                    Icons.star,
-                    Colors.orange,
+                  Text(
+                    totalSteps.toString(),
+                    style: const TextStyle(
+                      fontSize: 28,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
 
-              ],
+                ],
+
+              ),
+
+            ),
+
+            const SizedBox(height: 20),
+
+            /// BEST DAY
+            Container(
+
+              padding: const EdgeInsets.all(20),
+
+              decoration: BoxDecoration(
+                color: Colors.orange,
+                borderRadius: BorderRadius.circular(16),
+              ),
+
+              child: Column(
+
+                crossAxisAlignment: CrossAxisAlignment.start,
+
+                children: [
+
+                  const Text(
+                    "Best Walking Day",
+                    style: TextStyle(color: Colors.white70),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  Text(
+                    "$bestDaySteps steps",
+                    style: const TextStyle(
+                      fontSize: 26,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                ],
+
+              ),
+
+            ),
+
+            const SizedBox(height: 20),
+
+            /// INSIGHT
+            Container(
+
+              padding: const EdgeInsets.all(18),
+
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    blurRadius: 10,
+                    color: Colors.black.withOpacity(0.05),
+                  )
+                ],
+              ),
+
+              child: const Text(
+                "Walking consistently improves heart health, boosts mood, and increases energy levels.",
+                style: TextStyle(fontSize: 15),
+              ),
 
             ),
 
           ],
 
         ),
-
-      ),
-
-    );
-
-  }
-
-  /// SUMMARY CARD WIDGET
-  Widget summaryCard(
-      String title, String value, IconData icon, Color color) {
-
-    return Container(
-
-      padding: const EdgeInsets.all(18),
-
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(16),
-      ),
-
-      child: Column(
-
-        crossAxisAlignment: CrossAxisAlignment.start,
-
-        children: [
-
-          Icon(icon, color: Colors.white),
-
-          const SizedBox(height: 10),
-
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white70,
-            ),
-          ),
-
-          const SizedBox(height: 4),
-
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 22,
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-
-        ],
 
       ),
 
