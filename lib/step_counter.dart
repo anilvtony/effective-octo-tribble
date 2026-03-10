@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:pedometer/pedometer.dart'; // plugin to read step sensor
-import 'package:permission_handler/permission_handler.dart'; // permission manager
-import 'step_storage.dart'; // file used to store step data locally
+import 'package:pedometer/pedometer.dart'; // reads step sensor
+import 'package:permission_handler/permission_handler.dart'; // handles permissions
+import 'package:shared_preferences/shared_preferences.dart';
 
-// Main StepCounter widget
+import 'goal_settings_screen.dart';
+import 'step_storage.dart';
+
 class StepCounter extends StatefulWidget {
   const StepCounter({super.key});
 
@@ -14,27 +16,40 @@ class StepCounter extends StatefulWidget {
 
 class _StepCounterState extends State<StepCounter> {
 
-  int _initialSteps = 0;   // step value when app started today
-  int _currentSteps = 0;   // steps counted today
-  final int _goal = 10000; // daily step goal
+  int _initialSteps = 0;   // starting sensor value
+  int _currentSteps = 0;   // today's steps
 
-  StreamSubscription<StepCount>? _stepSubscription; // subscription to sensor stream
+  int _goal = 10000;       // default goal
+
+  StreamSubscription<StepCount>? _stepSubscription;
 
   @override
   void initState() {
     super.initState();
-    initialize(); // start initialization
+    initialize();
   }
 
-  // Initialize app
+  /// Initialize app
   Future<void> initialize() async {
 
-    await loadSavedSteps();     // load previously saved steps
-    await checkDailyReset();    // check if new day started
-    await requestPermission();  // request activity permission
+    await loadGoal();          // load saved goal
+    await loadSavedSteps();    // load previous steps
+    await checkDailyReset();   // reset if new day
+    await requestPermission(); // start sensor
   }
 
-  // Check if it is a new day and reset steps
+  /// Load goal from storage
+  Future<void> loadGoal() async {
+
+    final prefs = await SharedPreferences.getInstance();
+
+    setState(() {
+      _goal = prefs.getInt("step_goal") ?? 10000;
+    });
+
+  }
+
+  /// Reset steps if new day started
   Future<void> checkDailyReset() async {
 
     bool reset = await StepStorage.isNewDay();
@@ -52,55 +67,50 @@ class _StepCounterState extends State<StepCounter> {
     }
   }
 
-  // Request permission to access activity sensors
+  /// Ask activity recognition permission
   Future<void> requestPermission() async {
 
     var status = await Permission.activityRecognition.request();
 
     if (status.isGranted) {
-      startStepCounter(); // start counting steps
+      startStepCounter();
     } else {
-      debugPrint("Activity permission denied");
+      debugPrint("Permission denied");
     }
   }
 
-  // Start listening to pedometer sensor
+  /// Start step counter sensor
   void startStepCounter() {
 
     _stepSubscription =
         Pedometer.stepCountStream.listen((StepCount event) async {
 
-          // first step reading from device
+          // first sensor reading
           if (_initialSteps == 0) {
 
             _initialSteps = event.steps;
 
-            // save starting step value
             await StepStorage.saveInitialSteps(_initialSteps);
           }
 
-          // calculate today's steps
           int todaySteps = event.steps - _initialSteps;
 
           if (!mounted) return;
 
-          // update UI
           setState(() {
             _currentSteps = todaySteps;
           });
 
-          // save today's steps
           await StepStorage.saveTodaySteps(todaySteps);
 
         }, onError: (error) {
 
-          // print error if sensor fails
-          debugPrint("Step sensor error: $error");
+          debugPrint("Sensor error: $error");
 
         });
   }
 
-  // Load previously saved step data
+  /// Load saved steps
   Future<void> loadSavedSteps() async {
 
     _initialSteps = await StepStorage.getInitialSteps();
@@ -110,7 +120,7 @@ class _StepCounterState extends State<StepCounter> {
     setState(() {});
   }
 
-  // Reset button functionality
+  /// Manual reset
   Future<void> resetSteps() async {
 
     int newInitial = _initialSteps + _currentSteps;
@@ -124,7 +134,7 @@ class _StepCounterState extends State<StepCounter> {
     });
   }
 
-  // Cancel sensor stream when screen closes
+  /// Cancel sensor when screen closes
   @override
   void dispose() {
 
@@ -135,7 +145,6 @@ class _StepCounterState extends State<StepCounter> {
   @override
   Widget build(BuildContext context) {
 
-    // progress value for circular indicator
     double progress = (_currentSteps / _goal).clamp(0.0, 1.0);
 
     return Scaffold(
@@ -147,6 +156,28 @@ class _StepCounterState extends State<StepCounter> {
         centerTitle: true,
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
+
+        /// Goal settings button
+        actions: [
+
+          IconButton(
+            icon: const Icon(Icons.flag),
+
+            onPressed: () async {
+
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const GoalSettingsScreen(),
+                ),
+              );
+
+              // reload goal after returning
+              loadGoal();
+            },
+          )
+
+        ],
       ),
 
       body: Padding(
@@ -154,9 +185,9 @@ class _StepCounterState extends State<StepCounter> {
 
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+
           children: [
 
-            // Title
             const Text(
               "Today's Steps",
               style: TextStyle(
@@ -167,15 +198,17 @@ class _StepCounterState extends State<StepCounter> {
 
             const SizedBox(height: 40),
 
-            // Circular progress step indicator
+            /// Circular step progress
             Stack(
               alignment: Alignment.center,
+
               children: [
 
-                // Background circle
+                /// background circle
                 SizedBox(
                   width: 240,
                   height: 240,
+
                   child: CircularProgressIndicator(
                     value: 1,
                     strokeWidth: 14,
@@ -185,23 +218,24 @@ class _StepCounterState extends State<StepCounter> {
                   ),
                 ),
 
-                // Progress circle
+                /// progress circle
                 SizedBox(
                   width: 240,
                   height: 240,
+
                   child: CircularProgressIndicator(
                     value: progress,
                     strokeWidth: 14,
                     strokeCap: StrokeCap.round,
-                    valueColor: const AlwaysStoppedAnimation(
-                      Colors.blue,
-                    ),
+                    valueColor:
+                    const AlwaysStoppedAnimation(Colors.blue),
                   ),
                 ),
 
-                // Step count text
+                /// step number
                 Column(
                   mainAxisSize: MainAxisSize.min,
+
                   children: [
 
                     const Icon(
@@ -236,7 +270,7 @@ class _StepCounterState extends State<StepCounter> {
 
             const SizedBox(height: 40),
 
-            // Goal text
+            /// Goal text
             Text(
               "Goal: $_goal steps",
               style: const TextStyle(
@@ -247,7 +281,7 @@ class _StepCounterState extends State<StepCounter> {
 
             const SizedBox(height: 40),
 
-            // Reset button
+            /// Reset button
             SizedBox(
               width: double.infinity,
               height: 55,
@@ -270,6 +304,7 @@ class _StepCounterState extends State<StepCounter> {
                     color: Colors.white,
                   ),
                 ),
+
               ),
             )
 
