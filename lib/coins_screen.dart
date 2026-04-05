@@ -19,6 +19,7 @@ class _CoinsScreenState extends State<CoinsScreen> {
   int adsWatchedToday = 0;
   DateTime? lastAdWatchedTime;
   Timer? _cooldownTimer;
+  String cooldownText = "";
   bool isAdButtonEnabled = true;
 
   List<Map<String, dynamic>> coinHistory = [];
@@ -79,11 +80,11 @@ class _CoinsScreenState extends State<CoinsScreen> {
   }
 
   // 🔄 Update button state and cooldown text
-  // 🔄 Update button visibility (hides during cooldown, shows when ready)
   void updateCooldownStatus() {
     if (lastAdWatchedTime == null) {
       setState(() {
         isAdButtonEnabled = true;
+        cooldownText = "";
       });
       return;
     }
@@ -95,23 +96,45 @@ class _CoinsScreenState extends State<CoinsScreen> {
     if (remainingSeconds <= 0) {
       setState(() {
         isAdButtonEnabled = true;
+        cooldownText = "";
       });
     } else {
       setState(() {
         isAdButtonEnabled = false;
+        cooldownText = formatCooldown(remainingSeconds);
       });
 
-      // Start timer to check when button should reappear
+      // Start timer to update countdown
       _cooldownTimer?.cancel();
-      _cooldownTimer = Timer(Duration(seconds: remainingSeconds), () {
-        setState(() {
-          isAdButtonEnabled = true;
-        });
+      _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        int newElapsed = DateTime.now().difference(lastAdWatchedTime!).inSeconds;
+        int newRemaining = requiredSeconds - newElapsed;
+
+        if (newRemaining <= 0) {
+          timer.cancel();
+          setState(() {
+            isAdButtonEnabled = true;
+            cooldownText = "";
+          });
+        } else {
+          setState(() {
+            cooldownText = formatCooldown(newRemaining);
+          });
+        }
       });
     }
   }
 
-
+  // 📝 Format seconds to readable text
+  String formatCooldown(int seconds) {
+    if (seconds < 60) {
+      return "$seconds sec";
+    } else {
+      int minutes = seconds ~/ 60;
+      int secs = seconds % 60;
+      return secs > 0 ? "$minutes:${secs.toString().padLeft(2, '0')}" : "$minutes min";
+    }
+  }
 
   // 💾 Save ad watch data
   Future<void> recordAdWatched() async {
@@ -546,49 +569,56 @@ class _CoinsScreenState extends State<CoinsScreen> {
 
             /// 🎬 WATCH ADS BUTTON - CHANGED TO COMFORT COLORS (Teal/Cyan)
             /// 🎬 WATCH ADS BUTTON with COOLDOWN
-            /// 🎬 WATCH ADS BUTTON - Only visible when ready (hides during cooldown)
-            if (isAdButtonEnabled)
-              Container(
-                width: double.infinity,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF26C6DA), Color(0xFF00BCD4)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF26C6DA).withOpacity(0.4),
-                      blurRadius: 15,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
+            Container(
+              width: double.infinity,
+              height: 60,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isAdButtonEnabled
+                      ? [const Color(0xFF26C6DA), const Color(0xFF00BCD4)]
+                      : [Colors.grey.shade400, Colors.grey.shade600],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
                 ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => showWatchAdDialog(context),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.play_circle_fill, color: Colors.white, size: 32),
-                        const SizedBox(width: 12),
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "WATCH AD",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1,
-                              ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: isAdButtonEnabled
+                        ? const Color(0xFF26C6DA).withOpacity(0.4)
+                        : Colors.grey.withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: isAdButtonEnabled ? () => showWatchAdDialog(context) : null,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                          isAdButtonEnabled ? Icons.play_circle_fill : Icons.timer,
+                          color: Colors.white,
+                          size: 32
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isAdButtonEnabled ? "WATCH AD" : "WAIT $cooldownText",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
                             ),
+                          ),
+                          if (isAdButtonEnabled)
                             Text(
                               "Ad ${adsWatchedToday + 1} today • +10 COINS",
                               style: const TextStyle(
@@ -596,65 +626,22 @@ class _CoinsScreenState extends State<CoinsScreen> {
                                 fontSize: 12,
                               ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(width: 12),
-                        const Icon(Icons.monetization_on, color: Colors.amber, size: 28),
-                      ],
-                    ),
+                        ],
+                      ),
+                      const SizedBox(width: 12),
+                      Icon(Icons.monetization_on, color: Colors.amber, size: 28),
+                    ],
                   ),
                 ),
               ),
-
-            // Show gap info text when button is hidden
-            if (!isAdButtonEnabled)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.timer_outlined,
-                      color: Colors.grey.shade500,
-                      size: 32,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Ad break time",
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      adsWatchedToday < 3
-                          ? "Short break after ${adsWatchedToday} ad${adsWatchedToday == 1 ? '' : 's'}"
-                          : adsWatchedToday < 6
-                          ? "Taking a longer break..."
-                          : "Extended break to protect your account",
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
+            ),
             const SizedBox(height: 8),
 
             Center(
               child: Text(
                 isAdButtonEnabled
-                    ? "💡 ${adsWatchedToday < 3 ? 'First 3 ads: Quick break' : adsWatchedToday < 6 ? 'Next 3 ads: Medium break' : 'After 6 ads: Long break'} • Resets at 12 AM"
-                    : "⏱️ Button will appear when ready",
+                    ? "💡 ${adsWatchedToday < 3 ? 'First 3 ads: 30 sec gap' : adsWatchedToday < 6 ? 'Next 3 ads: 2 min gap' : 'After 6 ads: 5 min gap'} • Resets at 12 AM"
+                    : "⏱️ Please wait before watching next ad",
                 style: TextStyle(
                   color: Colors.grey.shade600,
                   fontSize: 12,
