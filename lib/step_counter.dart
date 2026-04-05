@@ -76,6 +76,7 @@ class _StepCounterState extends State<StepCounter> {
   }
 
   /// Start step counter sensor
+  /// Start step counter sensor
   void startStepCounter() {
 
     _stepSubscription =
@@ -88,6 +89,22 @@ class _StepCounterState extends State<StepCounter> {
           }
 
           int todaySteps = event.steps - _initialSteps;
+
+          // CHECK AND AWARD COINS!
+          int newCoins = await StepStorage.checkAndAwardCoins(todaySteps);
+
+          if (newCoins > 0) {
+            // Show notification or update UI for new coins
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text("🎉 Earned $newCoins coin${newCoins > 1 ? 's' : ''}!"),
+                  backgroundColor: Colors.amber,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          }
 
           if (!mounted) return;
 

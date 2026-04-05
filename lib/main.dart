@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'step_counter.dart';   // step counter screen
 import 'history_screen.dart'; // history screen file
+import 'coins_screen.dart';   // NEW: coins screen
 
 void main() {
   runApp(const StepApp()); // start the app
@@ -19,10 +20,11 @@ class _StepAppState extends State<StepApp> {
   // keeps track of selected bottom navigation tab
   int _currentIndex = 0;
 
-  // list of screens for navigation
+  // list of screens for navigation - ADDED CoinsScreen
   final List<Widget> _screens = [
     const StepCounter(),
     const HistoryScreen(),
+    const CoinsScreen(),  // NEW
   ];
 
   @override
@@ -31,12 +33,16 @@ class _StepAppState extends State<StepApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
 
+      theme: ThemeData(
+        useMaterial3: true,
+      ),
+
       home: Scaffold(
 
         // display screen based on selected tab
         body: _screens[_currentIndex],
 
-        // bottom navigation bar
+        // bottom navigation bar - ADDED Coins tab
         bottomNavigationBar: BottomNavigationBar(
 
           currentIndex: _currentIndex,
@@ -48,16 +54,24 @@ class _StepAppState extends State<StepApp> {
             });
           },
 
+          selectedItemColor: Colors.blue,
+          unselectedItemColor: Colors.grey,
+
           items: const [
 
             BottomNavigationBarItem(
               icon: Icon(Icons.directions_walk),
-              label: "StepCounts",
+              label: "Steps",
             ),
 
             BottomNavigationBarItem(
               icon: Icon(Icons.history),
               label: "History",
+            ),
+
+            BottomNavigationBarItem(  // NEW
+              icon: Icon(Icons.monetization_on),
+              label: "Coins",
             ),
 
           ],

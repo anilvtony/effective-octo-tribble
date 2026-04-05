@@ -124,7 +124,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   String formatVerticalDate(String date) {
-
     DateTime d = DateTime.parse(date);
 
     const months = [
@@ -132,7 +131,29 @@ class _HistoryScreenState extends State<HistoryScreen> {
       "Jul","Aug","Sep","Oct","Nov","Dec"
     ];
 
-    return "${months[d.month-1]} ${d.day}th";
+    // Get the correct ordinal suffix
+    String suffix;
+    int day = d.day;
+
+    if (day >= 11 && day <= 13) {
+      suffix = "th"; // Special case for 11th, 12th, 13th
+    } else {
+      switch (day % 10) {
+        case 1:
+          suffix = "st";
+          break;
+        case 2:
+          suffix = "nd";
+          break;
+        case 3:
+          suffix = "rd";
+          break;
+        default:
+          suffix = "th";
+      }
+    }
+
+    return "${months[d.month-1]} $day$suffix";
   }
 
   @override
