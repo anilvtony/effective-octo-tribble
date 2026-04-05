@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'step_storage.dart';
+import 'dart:math' show pi;
 
 class RewardsScreen extends StatefulWidget {
   const RewardsScreen({super.key});
@@ -298,7 +299,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                /*const SizedBox(height: 16),
 
                 // Watch Ad Button in popup - CHANGED TO TEAL/CYAN
                 Padding(
@@ -335,7 +336,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                       ),
                     ),
                   ),
-                ),
+                ),*/
 
                 const SizedBox(height: 12),
 
@@ -609,14 +610,199 @@ class _RewardsScreenState extends State<RewardsScreen> {
       await addSpendingEntry(giftCard['name'], cost, giftCard['value']);
       await loadData();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('🎉 Successfully purchased ${giftCard['name']}!'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      // 🎉 Show confetti celebration
+      showConfettiCelebration(context, giftCard['name'] as String, giftCard['value'] as String);
     }
+  }
+
+  // 🎉 Confetti celebration dialog
+  void showConfettiCelebration(BuildContext context, String itemName, String value) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFFF6B6B), Color(0xFF4ECDC4), Color(0xFFFFE66D), Color(0xFF95E1D3)],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Animated confetti area
+                Container(
+                  padding: const EdgeInsets.all(30),
+                  child: Column(
+                    children: [
+                      // 🎊 Celebration emojis animation
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _bounceEmoji('🎉', 0),
+                          _bounceEmoji('🎊', 100),
+                          _bounceEmoji('✨', 200),
+                          _bounceEmoji('🎁', 300),
+                          _bounceEmoji('🎈', 400),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Gift icon
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.3),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.card_giftcard,
+                          color: Colors.white,
+                          size: 60,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Success text
+                      const Text(
+                        "Congratulations!",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black26,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Item name
+                      Text(
+                        "You got $itemName",
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.95),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 5),
+
+                      // Value
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          "Worth $value",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Coins spent info
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.1),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.monetization_on, color: Colors.amber, size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        "Coins well spent!",
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 16,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Continue button
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF4ECDC4),
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 8,
+                      ),
+                      child: const Text(
+                        "AWESOME! 🎉",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+// Helper for bouncing emoji animation
+  Widget _bounceEmoji(String emoji, int delay) {
+    return TweenAnimationBuilder(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 800),
+      curve: Curves.elasticOut,
+      builder: (context, double value, child) {
+        return Transform.translate(
+          offset: Offset(0, -20 * value),
+          child: Transform.scale(
+            scale: 0.5 + (0.5 * value),
+            child: Text(
+              emoji,
+              style: const TextStyle(fontSize: 32),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> addSpendingEntry(String itemName, int coinsSpent, String value) async {
@@ -755,7 +941,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
+             /* const SizedBox(height: 20),
 
               // 🎬 WATCH ADS BUTTON - CHANGED TO TEAL/CYAN
               Container(
@@ -827,7 +1013,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                     fontSize: 12,
                   ),
                 ),
-              ),
+              ),*/
 
               const SizedBox(height: 30),
 

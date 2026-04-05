@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'step_storage.dart';
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CoinsScreen extends StatefulWidget {
@@ -14,6 +15,11 @@ class _CoinsScreenState extends State<CoinsScreen> {
   int walkCoinsEarned = 0;
   int adCoinsEarned = 0;
   int get totalCoinsEarned => walkCoinsEarned + adCoinsEarned;
+  // Ad cooldown tracking
+  int adsWatchedToday = 0;
+  DateTime? lastAdWatchedTime;
+  Timer? _cooldownTimer;
+  bool isAdButtonEnabled = true;
 
   List<Map<String, dynamic>> coinHistory = [];
   List<Map<String, dynamic>> adHistory = [];
@@ -26,7 +32,103 @@ class _CoinsScreenState extends State<CoinsScreen> {
   void initState() {
     super.initState();
     loadCoinsData();
+    checkAndResetDailyAdCount();
   }
+
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    super.dispose();
+  }
+
+
+  // 🕐 Check if it's a new day and reset ad count
+  Future<void> checkAndResetDailyAdCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? lastDateStr = prefs.getString('last_ad_date');
+    String todayStr = DateTime.now().toIso8601String().split('T')[0];
+
+    if (lastDateStr != todayStr) {
+      // New day - reset everything
+      await prefs.setInt('ads_watched_today', 0);
+      await prefs.setString('last_ad_date', todayStr);
+      await prefs.remove('last_ad_watched_time');
+      adsWatchedToday = 0;
+      lastAdWatchedTime = null;
+    } else {
+      // Same day - load existing data
+      adsWatchedToday = prefs.getInt('ads_watched_today') ?? 0;
+      int? lastTimeMillis = prefs.getInt('last_ad_watched_time');
+      if (lastTimeMillis != null) {
+        lastAdWatchedTime = DateTime.fromMillisecondsSinceEpoch(lastTimeMillis);
+      }
+    }
+
+    updateCooldownStatus();
+  }
+
+  // ⏱️ Calculate required cooldown based on ads watched
+  int getRequiredCooldownSeconds() {
+    if (adsWatchedToday < 3) {
+      return 30; // First 3 ads: 30-60 sec gap (using 30)
+    } else if (adsWatchedToday < 6) {
+      return 120; // Next 3 ads (4-6): 2 min gap
+    } else {
+      return 300; // After 6 ads: 5 min gap
+    }
+  }
+
+  // 🔄 Update button state and cooldown text
+  // 🔄 Update button visibility (hides during cooldown, shows when ready)
+  void updateCooldownStatus() {
+    if (lastAdWatchedTime == null) {
+      setState(() {
+        isAdButtonEnabled = true;
+      });
+      return;
+    }
+
+    int requiredSeconds = getRequiredCooldownSeconds();
+    int elapsedSeconds = DateTime.now().difference(lastAdWatchedTime!).inSeconds;
+    int remainingSeconds = requiredSeconds - elapsedSeconds;
+
+    if (remainingSeconds <= 0) {
+      setState(() {
+        isAdButtonEnabled = true;
+      });
+    } else {
+      setState(() {
+        isAdButtonEnabled = false;
+      });
+
+      // Start timer to check when button should reappear
+      _cooldownTimer?.cancel();
+      _cooldownTimer = Timer(Duration(seconds: remainingSeconds), () {
+        setState(() {
+          isAdButtonEnabled = true;
+        });
+      });
+    }
+  }
+
+
+
+  // 💾 Save ad watch data
+  Future<void> recordAdWatched() async {
+    final prefs = await SharedPreferences.getInstance();
+    adsWatchedToday++;
+    lastAdWatchedTime = DateTime.now();
+
+    await prefs.setInt('ads_watched_today', adsWatchedToday);
+    await prefs.setInt('last_ad_watched_time', lastAdWatchedTime!.millisecondsSinceEpoch);
+    await prefs.setString('last_ad_date', DateTime.now().toIso8601String().split('T')[0]);
+
+    updateCooldownStatus();
+  }
+
+
+
+
 
   Future<void> loadCoinsData() async {
     final data = await StepStorage.getCoinsData();
@@ -162,7 +264,7 @@ class _CoinsScreenState extends State<CoinsScreen> {
                                 Icon(Icons.monetization_on, color: Colors.amber, size: 36),
                                 SizedBox(width: 10),
                                 Text(
-                                  "+50",
+                                  "+10",
                                   style: TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.bold),
                                 ),
                               ],
@@ -180,11 +282,6 @@ class _CoinsScreenState extends State<CoinsScreen> {
                         "Watch a short video ad to earn bonus coins instantly!",
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.white, fontSize: 14),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        "⚡ No daily limit on ad rewards",
-                        style: TextStyle(color: Colors.amber.shade300, fontSize: 12, fontStyle: FontStyle.italic),
                       ),
                     ],
                   ),
@@ -246,11 +343,13 @@ class _CoinsScreenState extends State<CoinsScreen> {
     await Future.delayed(const Duration(seconds: 2));
     Navigator.pop(context);
 
-    await StepStorage.addCoins(50);
+    await StepStorage.addCoins(10);
 
     final prefs = await SharedPreferences.getInstance();
     int currentAdCoins = prefs.getInt('ad_coins_earned') ?? 0;
-    await prefs.setInt('ad_coins_earned', currentAdCoins + 50);
+    await prefs.setInt('ad_coins_earned', currentAdCoins + 10);
+
+    await recordAdWatched(); // ADD THIS LINE after setting coins
 
     await loadCoinsData();
 
@@ -271,7 +370,7 @@ class _CoinsScreenState extends State<CoinsScreen> {
             Icon(Icons.monetization_on, size: 60, color: Colors.amber),
             SizedBox(height: 15),
             Text(
-              "+50 Coins Added!",
+              "+10 Coins Added!",
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 10),
@@ -339,7 +438,7 @@ class _CoinsScreenState extends State<CoinsScreen> {
         child: Column(
           children: [
             /// COIN BALANCE CARD
-            Container(
+            /*Container(
               width: double.infinity,
               padding: const EdgeInsets.all(30),
               decoration: BoxDecoration(
@@ -372,7 +471,7 @@ class _CoinsScreenState extends State<CoinsScreen> {
                   ),
                 ],
               ),
-            ),
+            ),*/
 
             const SizedBox(height: 30),
 
@@ -440,117 +539,122 @@ class _CoinsScreenState extends State<CoinsScreen> {
               ),
             ),
 
-            if (totalCoinsEarned > coins)
-              Container(
-                margin: const EdgeInsets.only(top: 15),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.shopping_cart, color: Colors.red.shade400, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      "${totalCoinsEarned - coins} coins spent",
-                      style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ),
 
-            if (coins == totalCoinsEarned && coins > 0)
-              Container(
-                margin: const EdgeInsets.only(top: 15),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.green.shade200),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green.shade400, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      "All coins available! Nothing spent yet.",
-                      style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ),
+
 
             const SizedBox(height: 20),
 
             /// 🎬 WATCH ADS BUTTON - CHANGED TO COMFORT COLORS (Teal/Cyan)
-            Container(
-              width: double.infinity,
-              height: 60,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  // CHANGED: Pink/Red → Teal/Cyan gradient
-                  colors: [Color(0xFF26C6DA), Color(0xFF00BCD4)],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF26C6DA).withOpacity(0.4),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
+            /// 🎬 WATCH ADS BUTTON with COOLDOWN
+            /// 🎬 WATCH ADS BUTTON - Only visible when ready (hides during cooldown)
+            if (isAdButtonEnabled)
+              Container(
+                width: double.infinity,
+                height: 60,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF26C6DA), Color(0xFF00BCD4)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
                   ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => showWatchAdDialog(context),
                   borderRadius: BorderRadius.circular(16),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.play_circle_fill, color: Colors.white, size: 32),
-                      SizedBox(width: 12),
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "WATCH AD",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF26C6DA).withOpacity(0.4),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => showWatchAdDialog(context),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.play_circle_fill, color: Colors.white, size: 32),
+                        const SizedBox(width: 12),
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "WATCH AD",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1,
+                              ),
                             ),
-                          ),
-                          Text(
-                            "+50 COINS INSTANTLY",
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
+                            Text(
+                              "Ad ${adsWatchedToday + 1} today • +10 COINS",
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(width: 12),
-                      Icon(Icons.monetization_on, color: Colors.amber, size: 28),
-                    ],
+                          ],
+                        ),
+                        const SizedBox(width: 12),
+                        const Icon(Icons.monetization_on, color: Colors.amber, size: 28),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+
+            // Show gap info text when button is hidden
+            if (!isAdButtonEnabled)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.timer_outlined,
+                      color: Colors.grey.shade500,
+                      size: 32,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Ad break time",
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      adsWatchedToday < 3
+                          ? "Short break after ${adsWatchedToday} ad${adsWatchedToday == 1 ? '' : 's'}"
+                          : adsWatchedToday < 6
+                          ? "Taking a longer break..."
+                          : "Extended break to protect your account",
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             const SizedBox(height: 8),
 
             Center(
               child: Text(
-                "💡 Watch ads anytime to earn bonus coins (No daily limit)",
+                isAdButtonEnabled
+                    ? "💡 ${adsWatchedToday < 3 ? 'First 3 ads: Quick break' : adsWatchedToday < 6 ? 'Next 3 ads: Medium break' : 'After 6 ads: Long break'} • Resets at 12 AM"
+                    : "⏱️ Button will appear when ready",
                 style: TextStyle(
                   color: Colors.grey.shade600,
                   fontSize: 12,
