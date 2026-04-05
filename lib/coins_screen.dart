@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'step_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CoinsScreen extends StatefulWidget {
   const CoinsScreen({super.key});
@@ -10,8 +11,13 @@ class CoinsScreen extends StatefulWidget {
 
 class _CoinsScreenState extends State<CoinsScreen> {
   int coins = 0;
-  int totalCoinsEarned = 0;
+  int walkCoinsEarned = 0;
+  int adCoinsEarned = 0;
+  int get totalCoinsEarned => walkCoinsEarned + adCoinsEarned;
+
   List<Map<String, dynamic>> coinHistory = [];
+  List<Map<String, dynamic>> adHistory = [];
+  Map<String, dynamic> dailyInfo = {};
 
   DateTime? fromDate;
   DateTime? toDate;
@@ -24,34 +30,23 @@ class _CoinsScreenState extends State<CoinsScreen> {
 
   Future<void> loadCoinsData() async {
     final data = await StepStorage.getCoinsData();
-
-    // CRITICAL FIX: Use the actual stored coin balance as the source of truth
-    // Available coins should equal total earned on day 1 (before spending)
-    int availableCoins = data['coins'] ?? 0;
-
-    // Calculate total earned from history properly
-    int calculatedEarned = _calculateTotalFromHistory(data['history']);
-
-    // If no history but has coins, or first day, make them equal
-    if (calculatedEarned == 0 && availableCoins > 0) {
-      calculatedEarned = availableCoins;
-    }
+    final prefs = await SharedPreferences.getInstance();
 
     setState(() {
-      coins = availableCoins;
-      totalCoinsEarned = calculatedEarned;
+      coins = data['coins'] ?? 0;
+      walkCoinsEarned = _calculateTotalFromHistory(data['history']);
+      adCoinsEarned = prefs.getInt('ad_coins_earned') ?? 0;
       coinHistory = List<Map<String, dynamic>>.from(data['history'] ?? []);
+      dailyInfo = data['dailyInfo'] ?? {};
     });
   }
 
-  /// FIXED: Properly calculate total from history
   int _calculateTotalFromHistory(List<dynamic>? history) {
     if (history == null || history.isEmpty) return 0;
 
     int total = 0;
     for (var item in history) {
       if (item is Map) {
-        // Get coinsEarned field, default to 1 for backward compatibility
         int earned = 1;
         if (item.containsKey('coinsEarned')) {
           var val = item['coinsEarned'];
@@ -98,6 +93,205 @@ class _CoinsScreenState extends State<CoinsScreen> {
     }
   }
 
+  /// 🎬 Show Watch Ad Dialog - CHANGED TO COMFORT COLORS (Teal/Cyan instead of Red)
+  void showWatchAdDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                // CHANGED: Pink/Red → Teal/Cyan for comfort
+                colors: [Color(0xFF26C6DA), Color(0xFF0097A7)],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF26C6DA).withOpacity(0.4),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.videocam, color: Colors.white, size: 48),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        "Watch Video Ad",
+                        style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+                        ),
+                        child: const Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.monetization_on, color: Colors.amber, size: 36),
+                                SizedBox(width: 10),
+                                Text(
+                                  "+50",
+                                  style: TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              "COINS REWARD",
+                              style: TextStyle(color: Colors.white, fontSize: 14, letterSpacing: 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                      const Text(
+                        "Watch a short video ad to earn bonus coins instantly!",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 14),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        "⚡ No daily limit on ad rewards",
+                        style: TextStyle(color: Colors.amber.shade300, fontSize: 12, fontStyle: FontStyle.italic),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            watchAdAndReward();
+                          },
+                          icon: const Icon(Icons.play_arrow, size: 28),
+                          label: const Text(
+                            "WATCH AD NOW",
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            // CHANGED: Red → Teal for button text color
+                            foregroundColor: const Color(0xFF00838F),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            elevation: 4,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          "Maybe Later",
+                          style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 🎬 Watch ad and give reward
+  Future<void> watchAdAndReward() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+    );
+
+    await Future.delayed(const Duration(seconds: 2));
+    Navigator.pop(context);
+
+    await StepStorage.addCoins(50);
+
+    final prefs = await SharedPreferences.getInstance();
+    int currentAdCoins = prefs.getInt('ad_coins_earned') ?? 0;
+    await prefs.setInt('ad_coins_earned', currentAdCoins + 50);
+
+    await loadCoinsData();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green.shade600),
+            const SizedBox(width: 10),
+            const Text("Reward Earned!"),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.monetization_on, size: 60, color: Colors.amber),
+            SizedBox(height: 15),
+            Text(
+              "+50 Coins Added!",
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 10),
+            Text("Thanks for watching. Enjoy your reward!"),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              minimumSize: const Size(double.infinity, 50),
+            ),
+            child: const Text("Awesome!", style: TextStyle(fontSize: 16)),
+          ),
+        ],
+      ),
+    );
+  }
+
   String formatShortDate(DateTime date) {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return "${months[date.month - 1]} ${date.day}";
@@ -121,6 +315,12 @@ class _CoinsScreenState extends State<CoinsScreen> {
     List<Map<String, dynamic>> recentHistory = coinHistory.length > 5
         ? coinHistory.sublist(coinHistory.length - 5)
         : coinHistory;
+
+    int dailyEarned = dailyInfo['dailyEarned'] ?? 0;
+    int maxDaily = dailyInfo['maxDaily'] ?? 500;
+    int remaining = dailyInfo['remaining'] ?? 500;
+    double progress = dailyEarned / maxDaily;
+    bool limitReached = dailyEarned >= maxDaily;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FF),
@@ -188,20 +388,58 @@ class _CoinsScreenState extends State<CoinsScreen> {
                     subtitle: "To spend now",
                   ),
                 ),
-                const SizedBox(width: 15),
+                const SizedBox(width: 10),
                 Expanded(
                   child: _buildStatCard(
-                    icon: Icons.monetization_on,
-                    title: "Total Earned",
-                    value: totalCoinsEarned.toString(),
+                    icon: Icons.directions_walk,
+                    title: "Walk Coins",
+                    value: walkCoinsEarned.toString(),
                     color: Colors.green,
-                    subtitle: "Lifetime",
+                    subtitle: "From steps",
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildStatCard(
+                    icon: Icons.play_circle_fill,
+                    title: "Ad Coins",
+                    value: adCoinsEarned.toString(),
+                    // CHANGED: Pink → Teal for ad coins card
+                    color: const Color(0xFF00BCD4),
+                    subtitle: "From videos",
                   ),
                 ),
               ],
             ),
 
-            // Show spent coins only if there's a difference
+            const SizedBox(height: 10),
+
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Colors.amber, Colors.orange],
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.monetization_on, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Total Earned: $totalCoinsEarned",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             if (totalCoinsEarned > coins)
               Container(
                 margin: const EdgeInsets.only(top: 15),
@@ -224,7 +462,6 @@ class _CoinsScreenState extends State<CoinsScreen> {
                 ),
               ),
 
-            // DEBUG: Show if they're equal (first day)
             if (coins == totalCoinsEarned && coins > 0)
               Container(
                 margin: const EdgeInsets.only(top: 15),
@@ -246,6 +483,194 @@ class _CoinsScreenState extends State<CoinsScreen> {
                   ],
                 ),
               ),
+
+            const SizedBox(height: 20),
+
+            /// 🎬 WATCH ADS BUTTON - CHANGED TO COMFORT COLORS (Teal/Cyan)
+            Container(
+              width: double.infinity,
+              height: 60,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  // CHANGED: Pink/Red → Teal/Cyan gradient
+                  colors: [Color(0xFF26C6DA), Color(0xFF00BCD4)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF26C6DA).withOpacity(0.4),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => showWatchAdDialog(context),
+                  borderRadius: BorderRadius.circular(16),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.play_circle_fill, color: Colors.white, size: 32),
+                      SizedBox(width: 12),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "WATCH AD",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          Text(
+                            "+50 COINS INSTANTLY",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(width: 12),
+                      Icon(Icons.monetization_on, color: Colors.amber, size: 28),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Center(
+              child: Text(
+                "💡 Watch ads anytime to earn bonus coins (No daily limit)",
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            /// DAILY LIMIT PROGRESS CARD - CHANGED TO COMFORT COLORS (Indigo/Blue instead of Purple)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  // CHANGED: Purple → Indigo/Blue for comfort
+                  colors: [Color(0xFF5C6BC0), Color(0xFF3949AB)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF5C6BC0).withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.timer, color: Colors.white70),
+                          SizedBox(width: 8),
+                          Text(
+                            "Daily Walk Limit",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: limitReached ? Colors.green : Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          limitReached ? "COMPLETED!" : "$remaining LEFT",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "$dailyEarned",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 42,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        " / $maxDaily",
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Icon(Icons.monetization_on, color: Colors.amber, size: 32),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Container(
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: progress.clamp(0.0, 1.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Colors.amber, Colors.orange],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    limitReached
+                        ? "🎉 You've earned all coins for today! Come back tomorrow."
+                        : "Walk ${(remaining * 10)} more steps to earn $remaining more coins",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
             const SizedBox(height: 30),
 
@@ -431,10 +856,10 @@ class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
         dailyTotals[date] = 0;
       }
       groupedByDate[date]!.add(item);
-      dailyTotals[date] = dailyTotals[date]! + (item['coinsEarned'] ?? 1) as int;
+      dailyTotals[date] = dailyTotals[date]! + ((item['coinsEarned'] ?? 1) as int);
     }
 
-    rangeTotal = dailyTotals.values.fold(0, (sum, val) => sum + val);
+    rangeTotal = dailyTotals.values.fold<int>(0, (sum, val) => sum + val);
     totalDaysWithCoins = groupedByDate.length;
 
     groupedByDate = Map.fromEntries(
@@ -479,7 +904,6 @@ class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
 
       body: Column(
         children: [
-          /// SUMMARY CARD
           Container(
             margin: const EdgeInsets.all(20),
             padding: const EdgeInsets.all(20),
@@ -508,7 +932,6 @@ class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
             ),
           ),
 
-          /// DAY-WISE LIST
           Expanded(
             child: groupedByDate.isEmpty
                 ? Center(

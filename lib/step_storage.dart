@@ -19,6 +19,11 @@ class StepStorage {
   static const String coinHistoryKey = "coin_history";
   static const String lastCoinMilestoneKey = "last_coin_milestone";
 
+  // 🆕 NEW: Daily limit keys
+  static const String dailyCoinsEarnedKey = "daily_coins_earned";
+  static const String dailyCoinsDateKey = "daily_coins_date";
+  static const int maxDailyCoins = 500; // Max 500 coins per day
+
   // ==================== STEP TRACKING METHODS ====================
 
   /// Save initial sensor steps value
@@ -61,12 +66,18 @@ class StepStorage {
 
     if (lastDate == null) {
       await prefs.setString(lastDateKey, today);
+      // 🆕 Reset daily coins on first use
+      await prefs.setString(dailyCoinsDateKey, today);
+      await prefs.setInt(dailyCoinsEarnedKey, 0);
       return false;
     }
 
     if (lastDate != today) {
       await prefs.setString(lastDateKey, today);
       await prefs.setInt(todayStepsKey, 0);
+      // 🆕 Reset daily coins on new day
+      await prefs.setString(dailyCoinsDateKey, today);
+      await prefs.setInt(dailyCoinsEarnedKey, 0);
       return true;
     }
 
@@ -160,6 +171,29 @@ class StepStorage {
   static int _lastProcessedSteps = -1;
   static int _cachedLastMilestone = -1;
 
+  /// 🆕 NEW: Get daily coins info
+  static Future<Map<String, dynamic>> getDailyCoinsInfo() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    String today = DateTime.now().toString().split(" ")[0];
+    String? savedDate = prefs.getString(dailyCoinsDateKey);
+    int dailyEarned = prefs.getInt(dailyCoinsEarnedKey) ?? 0;
+
+    // Reset if new day
+    if (savedDate != today) {
+      await prefs.setString(dailyCoinsDateKey, today);
+      await prefs.setInt(dailyCoinsEarnedKey, 0);
+      dailyEarned = 0;
+    }
+
+    return {
+      'dailyEarned': dailyEarned,
+      'maxDaily': maxDailyCoins,
+      'remaining': maxDailyCoins - dailyEarned,
+      'canEarnMore': dailyEarned < maxDailyCoins,
+    };
+  }
+
   /// Get all coins data
   static Future<Map<String, dynamic>> getCoinsData() async {
     final prefs = await SharedPreferences.getInstance();
@@ -169,10 +203,12 @@ class StepStorage {
       'totalStepsEarned': prefs.getInt(totalStepsEarnedKey) ?? 0,
       'lastMilestone': prefs.getInt(lastCoinMilestoneKey) ?? 0,
       'history': _decodeHistory(prefs.getString(coinHistoryKey)),
+      // 🆕 Include daily limit info
+      'dailyInfo': await getDailyCoinsInfo(),
     };
   }
 
-  /// Check and award coins - 100% BUG-FIXED VERSION
+  /// Check and award coins - WITH DAILY LIMIT
   static Future<int> checkAndAwardCoins(int currentSteps) async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -181,6 +217,23 @@ class StepStorage {
       return 0;
     }
     _lastProcessedSteps = currentSteps;
+
+    // 🆕 Check daily limit first
+    String today = DateTime.now().toString().split(" ")[0];
+    String? savedDate = prefs.getString(dailyCoinsDateKey);
+    int dailyEarned = prefs.getInt(dailyCoinsEarnedKey) ?? 0;
+
+    // Reset if new day
+    if (savedDate != today) {
+      await prefs.setString(dailyCoinsDateKey, today);
+      await prefs.setInt(dailyCoinsEarnedKey, 0);
+      dailyEarned = 0;
+    }
+
+    // 🆕 Check if daily limit reached
+    if (dailyEarned >= maxDailyCoins) {
+      return -1; // Signal that daily limit is reached
+    }
 
     // CRITICAL FIX 2: Use cache if available, else load from storage
     int lastMilestone;
@@ -191,11 +244,17 @@ class StepStorage {
     }
 
     int currentCoins = prefs.getInt(coinsKey) ?? 0;
-    int currentMilestone = currentSteps ~/ 10;
+    int currentMilestone = (currentSteps ~/ 10).toInt();
 
     // Only award if we crossed a NEW milestone
     if (currentMilestone > lastMilestone) {
       int newCoins = currentMilestone - lastMilestone;
+
+      // 🆕 Apply daily limit cap
+      int remainingDaily = maxDailyCoins - dailyEarned;
+      if (newCoins > remainingDaily) {
+        newCoins = remainingDaily; // Cap at remaining daily allowance
+      }
 
       // Update cache immediately
       _cachedLastMilestone = currentMilestone;
@@ -204,6 +263,9 @@ class StepStorage {
       await prefs.setInt(coinsKey, currentCoins + newCoins);
       await prefs.setInt(lastCoinMilestoneKey, currentMilestone);
       await prefs.setInt(totalStepsEarnedKey, currentSteps);
+
+      // 🆕 Update daily earned
+      await prefs.setInt(dailyCoinsEarnedKey, dailyEarned + newCoins);
 
       // Add to history
       await _addCoinToHistory(newCoins, currentSteps);
@@ -294,6 +356,10 @@ class StepStorage {
     await prefs.remove(lastCoinMilestoneKey);
     await prefs.remove(coinHistoryKey);
 
+    // 🆕 Reset daily limit too
+    await prefs.remove(dailyCoinsEarnedKey);
+    await prefs.remove(dailyCoinsDateKey);
+
     // Reset cache
     _cachedLastMilestone = -1;
     _lastProcessedSteps = -1;
@@ -313,6 +379,9 @@ class StepStorage {
       'totalStepsEarned': prefs.getInt(totalStepsEarnedKey) ?? 0,
       'lastMilestone': prefs.getInt(lastCoinMilestoneKey) ?? 0,
       'lastDate': prefs.getString(lastDateKey),
+      // 🆕 Include daily info
+      'dailyEarned': prefs.getInt(dailyCoinsEarnedKey) ?? 0,
+      'dailyLimit': maxDailyCoins,
     };
   }
 
@@ -324,6 +393,39 @@ class StepStorage {
     _lastProcessedSteps = -1;
   }
 
+  // Add these methods inside your StepStorage class
+
+  static Future<void> addAdReward(int coins) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Update total ad coins
+    int currentTotal = prefs.getInt('total_ad_coins') ?? 0;
+    await prefs.setInt('total_ad_coins', currentTotal + coins);
+
+    // Add to ad history
+    final historyJson = prefs.getString('ad_history') ?? '[]';
+    final List<dynamic> history = jsonDecode(historyJson);
+
+    history.add({
+      'date': DateTime.now().toIso8601String().split('T')[0],
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'coinsEarned': coins,
+      'source': 'ad',
+    });
+
+    await prefs.setString('ad_history', jsonEncode(history));
+  }
+
+  static Future<Map<String, dynamic>> getAdCoinsData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final historyJson = prefs.getString('ad_history') ?? '[]';
+
+    return {
+      'totalAdCoins': prefs.getInt('total_ad_coins') ?? 0,
+      'adHistory': jsonDecode(historyJson),
+    };
+  }
+
   /// Debug print all data
   static Future<void> debugPrint() async {
     final prefs = await SharedPreferences.getInstance();
@@ -333,6 +435,8 @@ class StepStorage {
     print("totalStepsEarned: ${prefs.getInt(totalStepsEarnedKey)}");
     print("cachedMilestone: $_cachedLastMilestone");
     print("lastProcessed: $_lastProcessedSteps");
+    print("dailyEarned: ${prefs.getInt(dailyCoinsEarnedKey)}");
+    print("dailyLimit: $maxDailyCoins");
     print("====================");
   }
 }

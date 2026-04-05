@@ -75,6 +75,7 @@ class _StepCounterState extends State<StepCounter> {
   }
 
   /// Start step counter sensor - BUG-FIXED VERSION
+  /// Start step counter sensor - WITH DAILY LIMIT
   void startStepCounter() {
     _stepSubscription = Pedometer.stepCountStream.listen((StepCount event) async {
 
@@ -93,11 +94,115 @@ class _StepCounterState extends State<StepCounter> {
 
         _processingCoin = false;
 
-        if (newCoins > 0 && mounted) {
+        // 🆕 Handle daily limit reached (-1)
+        if (newCoins == -1 && mounted) {
+          // Check if we already showed limit message today
+          final prefs = await SharedPreferences.getInstance();
+          String today = DateTime.now().toString().split(" ")[0];
+          String? lastLimitMsg = prefs.getString("last_limit_msg_date");
+
+          if (lastLimitMsg != today) {
+            await prefs.setString("last_limit_msg_date", today);
+
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                title: Row(
+                  children: [
+                    Icon(Icons.celebration, color: Colors.amber.shade600),
+                    const SizedBox(width: 10),
+                    const Text("Daily Limit Reached!"),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.amber.shade100, Colors.orange.shade100],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        children: [
+                          const Icon(Icons.monetization_on, size: 50, color: Colors.amber),
+                          const SizedBox(height: 10),
+                          const Text(
+                            "500 / 500",
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            "coins earned today",
+                            style: TextStyle(
+                              color: Colors.orange.shade800,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    const Text(
+                      "Great job! You've hit your daily earning limit.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      "Come back tomorrow to earn more! 🌅",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
+                    child: const Text(
+                      "Awesome!",
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+        }
+        else if (newCoins > 0 && mounted) {
+          // 🆕 Show remaining daily coins in snackbar
+          var dailyInfo = await StepStorage.getDailyCoinsInfo();
+          int remaining = dailyInfo['remaining'] as int;
+
+          String message = "🎉 Earned $newCoins coin${newCoins > 1 ? 's' : ''}!";
+          if (remaining > 0) {
+            message += " ($remaining remaining today)";
+          } else {
+            message += " (Daily limit reached!)";
+          }
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("🎉 Earned $newCoins coin${newCoins > 1 ? 's' : ''}!"),
-              backgroundColor: Colors.amber,
+              content: Text(message),
+              backgroundColor: remaining > 0 ? Colors.amber : Colors.orange,
               duration: const Duration(seconds: 2),
             ),
           );

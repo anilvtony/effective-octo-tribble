@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'step_counter.dart';
 import 'history_screen.dart';
 import 'coins_screen.dart';
+import 'rewards_screen.dart';
 
 void main() {
   runApp(const StepApp());
@@ -21,6 +22,7 @@ class _StepAppState extends State<StepApp> {
     const StepCounter(),
     const HistoryScreen(),
     const CoinsScreen(),
+    const RewardsScreen(),
   ];
 
   @override
@@ -37,6 +39,9 @@ class _StepAppState extends State<StepApp> {
 
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _currentIndex,
+
+          // CRITICAL for 4+ items
+          type: BottomNavigationBarType.fixed,
 
           onTap: (index) {
             setState(() {
@@ -60,7 +65,12 @@ class _StepAppState extends State<StepApp> {
 
             BottomNavigationBarItem(
               icon: Icon(Icons.monetization_on),
-              label: "Coins",
+              label: "Earn",
+            ),
+
+            BottomNavigationBarItem(
+              icon: Icon(Icons.card_giftcard),
+              label: "Rewards",
             ),
           ],
         ),
