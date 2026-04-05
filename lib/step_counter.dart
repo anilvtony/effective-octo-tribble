@@ -15,12 +15,14 @@ class StepCounter extends StatefulWidget {
 }
 
 class _StepCounterState extends State<StepCounter> {
-
   int _initialSteps = 0;
   int _currentSteps = 0;
   int _goal = 10000;
 
   StreamSubscription<StepCount>? _stepSubscription;
+
+  // CRITICAL: Prevent concurrent coin processing
+  bool _processingCoin = false;
 
   @override
   void initState() {
@@ -47,11 +49,9 @@ class _StepCounterState extends State<StepCounter> {
 
   /// Reset steps if new day started
   Future<void> checkDailyReset() async {
-
     bool reset = await StepStorage.isNewDay();
 
     if (reset) {
-
       await StepStorage.saveInitialSteps(0);
 
       if (!mounted) return;
@@ -65,7 +65,6 @@ class _StepCounterState extends State<StepCounter> {
 
   /// Ask activity recognition permission
   Future<void> requestPermission() async {
-
     var status = await Permission.activityRecognition.request();
 
     if (status.isGranted) {
@@ -75,55 +74,51 @@ class _StepCounterState extends State<StepCounter> {
     }
   }
 
-  /// Start step counter sensor
-  /// Start step counter sensor
+  /// Start step counter sensor - BUG-FIXED VERSION
   void startStepCounter() {
+    _stepSubscription = Pedometer.stepCountStream.listen((StepCount event) async {
 
-    _stepSubscription =
-        Pedometer.stepCountStream.listen((StepCount event) async {
+      if (_initialSteps == 0) {
+        _initialSteps = event.steps;
+        await StepStorage.saveInitialSteps(_initialSteps);
+      }
 
-          if (_initialSteps == 0) {
+      int todaySteps = event.steps - _initialSteps;
 
-            _initialSteps = event.steps;
-            await StepStorage.saveInitialSteps(_initialSteps);
-          }
+      // CRITICAL FIX: Prevent concurrent processing with flag
+      if (!_processingCoin) {
+        _processingCoin = true;
 
-          int todaySteps = event.steps - _initialSteps;
+        int newCoins = await StepStorage.checkAndAwardCoins(todaySteps);
 
-          // CHECK AND AWARD COINS!
-          int newCoins = await StepStorage.checkAndAwardCoins(todaySteps);
+        _processingCoin = false;
 
-          if (newCoins > 0) {
-            // Show notification or update UI for new coins
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text("🎉 Earned $newCoins coin${newCoins > 1 ? 's' : ''}!"),
-                  backgroundColor: Colors.amber,
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            }
-          }
+        if (newCoins > 0 && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("🎉 Earned $newCoins coin${newCoins > 1 ? 's' : ''}!"),
+              backgroundColor: Colors.amber,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
 
-          if (!mounted) return;
+      if (!mounted) return;
 
-          setState(() {
-            _currentSteps = todaySteps;
-          });
+      setState(() {
+        _currentSteps = todaySteps;
+      });
 
-          await StepStorage.saveTodaySteps(todaySteps);
+      await StepStorage.saveTodaySteps(todaySteps);
 
-        }, onError: (error) {
-
-          debugPrint("Sensor error: $error");
-
-        });
+    }, onError: (error) {
+      debugPrint("Sensor error: $error");
+    });
   }
 
   /// Load saved steps
   Future<void> loadSavedSteps() async {
-
     _initialSteps = await StepStorage.getInitialSteps();
 
     if (!mounted) return;
@@ -134,19 +129,16 @@ class _StepCounterState extends State<StepCounter> {
   /// Cancel sensor when screen closes
   @override
   void dispose() {
-
     _stepSubscription?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-
     double progress = (_currentSteps / _goal).clamp(0.0, 1.0);
     int percent = (progress * 100).toInt();
 
     return Scaffold(
-
       backgroundColor: const Color(0xFFF4F6FF),
 
       appBar: AppBar(
@@ -157,28 +149,22 @@ class _StepCounterState extends State<StepCounter> {
         foregroundColor: Colors.white,
 
         actions: [
-
           IconButton(
             icon: const Icon(Icons.flag),
-
             onPressed: () async {
-
               await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => const GoalSettingsScreen(),
                 ),
               );
-
               loadGoal();
             },
           )
-
         ],
       ),
 
       body: Center(
-
         child: Padding(
           padding: const EdgeInsets.all(20),
 
@@ -186,7 +172,6 @@ class _StepCounterState extends State<StepCounter> {
             mainAxisAlignment: MainAxisAlignment.center,
 
             children: [
-
               const Text(
                 "Today's Steps",
                 style: TextStyle(
@@ -218,7 +203,6 @@ class _StepCounterState extends State<StepCounter> {
                   alignment: Alignment.center,
 
                   children: [
-
                     SizedBox(
                       width: 220,
                       height: 220,
@@ -228,8 +212,7 @@ class _StepCounterState extends State<StepCounter> {
                         strokeWidth: 14,
                         strokeCap: StrokeCap.round,
                         backgroundColor: Colors.grey.shade200,
-                        valueColor:
-                        const AlwaysStoppedAnimation(Colors.blue),
+                        valueColor: const AlwaysStoppedAnimation(Colors.blue),
                       ),
                     ),
 
@@ -237,7 +220,6 @@ class _StepCounterState extends State<StepCounter> {
                       mainAxisSize: MainAxisSize.min,
 
                       children: [
-
                         const Icon(
                           Icons.directions_walk,
                           size: 48,
@@ -272,10 +254,8 @@ class _StepCounterState extends State<StepCounter> {
                             fontWeight: FontWeight.w500,
                           ),
                         )
-
                       ],
                     )
-
                   ],
                 ),
               ),
@@ -304,7 +284,6 @@ class _StepCounterState extends State<StepCounter> {
                   mainAxisAlignment: MainAxisAlignment.center,
 
                   children: [
-
                     const Icon(
                       Icons.flag,
                       color: Colors.blue,
@@ -319,11 +298,9 @@ class _StepCounterState extends State<StepCounter> {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-
                   ],
                 ),
               )
-
             ],
           ),
         ),

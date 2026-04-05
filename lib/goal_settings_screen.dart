@@ -9,11 +9,7 @@ class GoalSettingsScreen extends StatefulWidget {
 }
 
 class _GoalSettingsScreenState extends State<GoalSettingsScreen> {
-
-  // Text controller for input
   final TextEditingController goalController = TextEditingController();
-
-  // Default goal
   int goal = 10000;
 
   @override
@@ -22,28 +18,22 @@ class _GoalSettingsScreenState extends State<GoalSettingsScreen> {
     loadGoal();
   }
 
-  /// Load saved goal from storage
   Future<void> loadGoal() async {
-
     final prefs = await SharedPreferences.getInstance();
 
     setState(() {
       goal = prefs.getInt("step_goal") ?? 10000;
       goalController.text = goal.toString();
     });
-
   }
 
-  /// Save goal to storage
   Future<void> saveGoal() async {
-
     final prefs = await SharedPreferences.getInstance();
 
     int newGoal = int.tryParse(goalController.text) ?? 10000;
 
     await prefs.setInt("step_goal", newGoal);
 
-    // Show confirmation
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text("Goal updated successfully"),
@@ -55,9 +45,7 @@ class _GoalSettingsScreenState extends State<GoalSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
-
       backgroundColor: const Color(0xFFF2F5FF),
 
       appBar: AppBar(
@@ -71,11 +59,9 @@ class _GoalSettingsScreenState extends State<GoalSettingsScreen> {
         padding: const EdgeInsets.all(24),
 
         child: Column(
-
           crossAxisAlignment: CrossAxisAlignment.start,
 
           children: [
-
             const Text(
               "Daily Step Goal",
               style: TextStyle(
@@ -95,36 +81,27 @@ class _GoalSettingsScreenState extends State<GoalSettingsScreen> {
 
             const SizedBox(height: 30),
 
-            /// Goal input box
             TextField(
-
               controller: goalController,
-
               keyboardType: TextInputType.number,
 
               decoration: InputDecoration(
-
                 labelText: "Step Goal",
-
                 prefixIcon: const Icon(Icons.flag),
 
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-
               ),
-
             ),
 
             const SizedBox(height: 30),
 
-            /// Save button
             SizedBox(
               width: double.infinity,
               height: 55,
 
               child: ElevatedButton(
-
                 onPressed: saveGoal,
 
                 style: ElevatedButton.styleFrom(
@@ -141,20 +118,17 @@ class _GoalSettingsScreenState extends State<GoalSettingsScreen> {
                     color: Colors.white,
                   ),
                 ),
-
               ),
             ),
 
             const SizedBox(height: 20),
 
-            /// Suggestion text
             const Text(
               "Recommended goal: 10,000 steps per day 🚶",
               style: TextStyle(
                 color: Colors.grey,
               ),
             ),
-
           ],
         ),
       ),

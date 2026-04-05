@@ -11,7 +11,6 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-
   List<Map<String, dynamic>> stepHistory = [];
 
   int goal = 10000;
@@ -34,18 +33,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> loadGoal() async {
-
     final prefs = await SharedPreferences.getInstance();
 
     setState(() {
       goal = prefs.getInt("step_goal") ?? 10000;
     });
-
   }
 
-  /// FIXED FUNCTION
   Future<void> loadHistory() async {
-
     if (startDate == null || endDate == null) return;
 
     final data = await StepStorage.getStepsBetweenDates(
@@ -58,31 +53,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
     int maxIndex = 0;
 
     for (int i = 0; i < data.length; i++) {
-
       int steps = data[i]["steps"];
-
       total += steps;
 
       if (steps > maxSteps) {
         maxSteps = steps;
         maxIndex = i;
       }
-
     }
 
     setState(() {
-
       stepHistory = data;
       totalSteps = total;
       bestDaySteps = maxSteps;
       bestDayIndex = maxIndex;
-
     });
-
   }
 
   Future<void> pickDateRange() async {
-
     final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2023),
@@ -90,17 +78,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
 
     if (picked != null) {
-
       int difference = picked.end.difference(picked.start).inDays;
 
       if (difference > 9) {
-
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Maximum range is 10 days"),
           ),
         );
-
         return;
       }
 
@@ -114,7 +99,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   String formatDate(DateTime d) {
-
     const months = [
       "Jan","Feb","Mar","Apr","May","Jun",
       "Jul","Aug","Sep","Oct","Nov","Dec"
@@ -131,12 +115,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
       "Jul","Aug","Sep","Oct","Nov","Dec"
     ];
 
-    // Get the correct ordinal suffix
     String suffix;
     int day = d.day;
 
     if (day >= 11 && day <= 13) {
-      suffix = "th"; // Special case for 11th, 12th, 13th
+      suffix = "th";
     } else {
       switch (day % 10) {
         case 1:
@@ -158,9 +141,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
-
       backgroundColor: const Color(0xFFF4F6FF),
 
       appBar: AppBar(
@@ -171,22 +152,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
 
       body: SingleChildScrollView(
-
         padding: const EdgeInsets.all(20),
 
         child: Column(
-
           crossAxisAlignment: CrossAxisAlignment.start,
 
           children: [
-
-            /// DATE RANGE SELECTOR
             GestureDetector(
-
               onTap: pickDateRange,
 
               child: Container(
-
                 padding: const EdgeInsets.all(14),
 
                 decoration: BoxDecoration(
@@ -201,15 +176,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
 
                 child: Row(
-
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
 
                   children: [
-
                     const Icon(Icons.date_range),
 
                     Text(
-
                       startDate == null
                           ? "Select Date Range"
                           : "${formatDate(startDate!)} - ${formatDate(endDate!)}",
@@ -218,24 +190,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
-
                     ),
 
                     const Icon(Icons.arrow_drop_down),
-
                   ],
-
                 ),
-
               ),
-
             ),
 
             const SizedBox(height: 20),
 
-            /// SCROLL HINT
             Container(
-
               padding: const EdgeInsets.symmetric(vertical: 8),
 
               decoration: BoxDecoration(
@@ -244,31 +209,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
 
               child: const Row(
-
                 mainAxisAlignment: MainAxisAlignment.center,
 
                 children: [
-
                   Icon(Icons.swipe, size: 16),
-
                   SizedBox(width: 8),
-
                   Text(
                     "Swipe horizontally to view more days",
                     style: TextStyle(fontSize: 13),
                   ),
-
                 ],
-
               ),
-
             ),
 
             const SizedBox(height: 15),
 
-            /// GRAPH CARD
             Container(
-
               padding: const EdgeInsets.all(20),
 
               decoration: BoxDecoration(
@@ -286,19 +242,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ? const Center(child: Text("No step data yet"))
 
                   : SingleChildScrollView(
-
                 scrollDirection: Axis.horizontal,
 
                 child: SizedBox(
-
                   width: stepHistory.length * 80,
 
                   height: 320,
 
                   child: BarChart(
-
                     BarChartData(
-
                       maxY: 15000,
 
                       gridData: FlGridData(
@@ -309,23 +261,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
                       barGroups:
                       List.generate(stepHistory.length, (index) {
-
                         int steps = stepHistory[index]["steps"];
-
                         bool best = index == bestDayIndex;
 
                         return BarChartGroupData(
-
                           x: index,
 
                           barRods: [
-
                             BarChartRodData(
-
                               toY: steps.toDouble(),
-
                               width: 24,
-
                               borderRadius: BorderRadius.circular(6),
 
                               gradient: LinearGradient(
@@ -335,27 +280,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 begin: Alignment.bottomCenter,
                                 end: Alignment.topCenter,
                               ),
-
                             )
-
                           ],
-
                         );
-
                       }),
 
                       titlesData: FlTitlesData(
-
                         leftTitles: AxisTitles(
-
                           sideTitles: SideTitles(
-
                             showTitles: true,
-
                             reservedSize: 40,
 
                             getTitlesWidget: (value, meta) {
-
                               if (value % 5000 != 0) {
                                 return const SizedBox();
                               }
@@ -364,11 +300,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 "${(value / 1000).toInt()}k",
                                 style: const TextStyle(fontSize: 12),
                               );
-
                             },
-
                           ),
-
                         ),
 
                         rightTitles: const AxisTitles(
@@ -376,13 +309,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         ),
 
                         topTitles: AxisTitles(
-
                           sideTitles: SideTitles(
-
                             showTitles: true,
 
                             getTitlesWidget: (value, meta) {
-
                               int index = value.toInt();
 
                               if (index >= stepHistory.length) {
@@ -398,31 +328,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               );
-
                             },
-
                           ),
-
                         ),
 
                         bottomTitles: AxisTitles(
-
                           sideTitles: SideTitles(
-
                             showTitles: true,
-
                             reservedSize: 60,
 
                             getTitlesWidget: (value, meta) {
-
                               int index = value.toInt();
 
                               if (index >= stepHistory.length) {
                                 return const SizedBox();
                               }
 
-                              String label =
-                              formatVerticalDate(stepHistory[index]["date"]);
+                              String label = formatVerticalDate(stepHistory[index]["date"]);
 
                               return RotatedBox(
                                 quarterTurns: 3,
@@ -431,30 +353,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   style: const TextStyle(fontSize: 11),
                                 ),
                               );
-
                             },
-
                           ),
-
                         ),
-
                       ),
-
                     ),
-
                   ),
-
                 ),
-
               ),
-
             ),
 
             const SizedBox(height: 30),
 
-            /// TOTAL STEPS
             Container(
-
               padding: const EdgeInsets.all(20),
 
               decoration: BoxDecoration(
@@ -463,11 +374,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
 
               child: Column(
-
                 crossAxisAlignment: CrossAxisAlignment.start,
 
                 children: [
-
                   const Text(
                     "Total Steps in Selected Range",
                     style: TextStyle(color: Colors.white70),
@@ -483,18 +392,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                 ],
-
               ),
-
             ),
 
             const SizedBox(height: 20),
 
-            /// BEST DAY
             Container(
-
               padding: const EdgeInsets.all(20),
 
               decoration: BoxDecoration(
@@ -503,11 +407,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
 
               child: Column(
-
                 crossAxisAlignment: CrossAxisAlignment.start,
 
                 children: [
-
                   const Text(
                     "Best Walking Day",
                     style: TextStyle(color: Colors.white70),
@@ -523,18 +425,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                 ],
-
               ),
-
             ),
 
             const SizedBox(height: 20),
 
-            /// INSIGHT
             Container(
-
               padding: const EdgeInsets.all(18),
 
               decoration: BoxDecoration(
@@ -552,17 +449,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 "Walking consistently improves heart health, boosts mood, and increases energy levels.",
                 style: TextStyle(fontSize: 15),
               ),
-
             ),
-
           ],
-
         ),
-
       ),
-
     );
-
   }
-
 }

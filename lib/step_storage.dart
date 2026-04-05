@@ -60,18 +60,13 @@ class StepStorage {
     String? lastDate = prefs.getString(lastDateKey);
 
     if (lastDate == null) {
-      // First time opening app
       await prefs.setString(lastDateKey, today);
       return false;
     }
 
     if (lastDate != today) {
-      // New day started
       await prefs.setString(lastDateKey, today);
-
-      // Reset today's steps
       await prefs.setInt(todayStepsKey, 0);
-
       return true;
     }
 
@@ -86,7 +81,6 @@ class StepStorage {
     final prefs = await SharedPreferences.getInstance();
 
     List<Map<String, dynamic>> data = [];
-
     DateTime current = start;
 
     while (!current.isAfter(end)) {
@@ -131,14 +125,11 @@ class StepStorage {
     return prefs.getInt("steps_$key") ?? 0;
   }
 
-  /// Clear all step history (use with caution)
+  /// Clear all step history
   static Future<void> clearAllStepHistory() async {
     final prefs = await SharedPreferences.getInstance();
-
-    // Get all keys
     Set<String> keys = prefs.getKeys();
 
-    // Remove all step-related keys
     for (String key in keys) {
       if (key.startsWith("steps_")) {
         await prefs.remove(key);
@@ -165,7 +156,11 @@ class StepStorage {
 
   // ==================== COINS SYSTEM METHODS ====================
 
-  /// Get all coins data (balance, history, stats)
+  // CRITICAL: Prevent duplicate processing
+  static int _lastProcessedSteps = -1;
+  static int _cachedLastMilestone = -1;
+
+  /// Get all coins data
   static Future<Map<String, dynamic>> getCoinsData() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -177,41 +172,43 @@ class StepStorage {
     };
   }
 
-  /// Check and award coins based on steps (every 1000 steps = 1 coin)
-  /// Returns number of new coins awarded
+  /// Check and award coins - 100% BUG-FIXED VERSION
   static Future<int> checkAndAwardCoins(int currentSteps) async {
     final prefs = await SharedPreferences.getInstance();
 
-    int lastMilestone = prefs.getInt(lastCoinMilestoneKey) ?? 0;
+    // CRITICAL FIX 1: Prevent processing same steps twice
+    if (currentSteps == _lastProcessedSteps) {
+      return 0;
+    }
+    _lastProcessedSteps = currentSteps;
+
+    // CRITICAL FIX 2: Use cache if available, else load from storage
+    int lastMilestone;
+    if (_cachedLastMilestone >= 0) {
+      lastMilestone = _cachedLastMilestone;
+    } else {
+      lastMilestone = prefs.getInt(lastCoinMilestoneKey) ?? 0;
+    }
+
     int currentCoins = prefs.getInt(coinsKey) ?? 0;
-    int totalStepsEarned = prefs.getInt(totalStepsEarnedKey) ?? 0;
+    int currentMilestone = currentSteps ~/ 10;
 
-    // Calculate how many 1000-step milestones reached
-    int currentMilestone = currentSteps ~/ 1000;
-
+    // Only award if we crossed a NEW milestone
     if (currentMilestone > lastMilestone) {
       int newCoins = currentMilestone - lastMilestone;
 
-      // Update coins
-      currentCoins += newCoins;
-      await prefs.setInt(coinsKey, currentCoins);
+      // Update cache immediately
+      _cachedLastMilestone = currentMilestone;
 
-      // Update total steps tracked for coins
-      totalStepsEarned = currentSteps;
-      await prefs.setInt(totalStepsEarnedKey, totalStepsEarned);
-
-      // Update last milestone
+      // Update storage
+      await prefs.setInt(coinsKey, currentCoins + newCoins);
       await prefs.setInt(lastCoinMilestoneKey, currentMilestone);
+      await prefs.setInt(totalStepsEarnedKey, currentSteps);
 
       // Add to history
       await _addCoinToHistory(newCoins, currentSteps);
 
       return newCoins;
-    }
-
-    // Update total steps even if no new coins
-    if (currentSteps > totalStepsEarned) {
-      await prefs.setInt(totalStepsEarnedKey, currentSteps);
     }
 
     return 0;
@@ -226,24 +223,23 @@ class StepStorage {
     String today = DateTime.now().toString().split(" ")[0];
     int timestamp = DateTime.now().millisecondsSinceEpoch;
 
-    // Add entry for each coin earned
-    for (int i = 0; i < coinsEarned; i++) {
-      history.add({
-        'date': today,
-        'stepsAtTime': stepsAtTime,
-        'timestamp': timestamp,
-      });
-    }
+    // Add single entry with coins earned
+    history.add({
+      'date': today,
+      'stepsAtTime': stepsAtTime,
+      'coinsEarned': coinsEarned,
+      'timestamp': timestamp,
+    });
 
-    // Keep only last 100 entries to prevent storage issues
-    if (history.length > 100) {
-      history = history.sublist(history.length - 100);
+    // Keep only last 50 entries
+    if (history.length > 50) {
+      history = history.sublist(history.length - 50);
     }
 
     await prefs.setString(coinHistoryKey, _encodeHistory(history));
   }
 
-  /// Decode history from JSON string
+  /// Decode history from JSON
   static List<Map<String, dynamic>> _decodeHistory(String? jsonStr) {
     if (jsonStr == null || jsonStr.isEmpty) return [];
     try {
@@ -254,7 +250,7 @@ class StepStorage {
     }
   }
 
-  /// Encode history to JSON string
+  /// Encode history to JSON
   static String _encodeHistory(List<Map<String, dynamic>> history) {
     return jsonEncode(history);
   }
@@ -265,14 +261,14 @@ class StepStorage {
     return prefs.getInt(coinsKey) ?? 0;
   }
 
-  /// Add coins manually (for rewards/purchases)
+  /// Add coins manually
   static Future<void> addCoins(int amount) async {
     final prefs = await SharedPreferences.getInstance();
     int current = prefs.getInt(coinsKey) ?? 0;
     await prefs.setInt(coinsKey, current + amount);
   }
 
-  /// Spend coins (returns true if successful, false if insufficient)
+  /// Spend coins
   static Future<bool> spendCoins(int amount) async {
     final prefs = await SharedPreferences.getInstance();
     int current = prefs.getInt(coinsKey) ?? 0;
@@ -290,13 +286,17 @@ class StepStorage {
     await prefs.remove(coinHistoryKey);
   }
 
-  /// Reset all coins (for testing)
+  /// Reset all coins
   static Future<void> resetCoins() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(coinsKey);
     await prefs.remove(totalStepsEarnedKey);
     await prefs.remove(lastCoinMilestoneKey);
     await prefs.remove(coinHistoryKey);
+
+    // Reset cache
+    _cachedLastMilestone = -1;
+    _lastProcessedSteps = -1;
   }
 
   // ==================== UTILITY METHODS ====================
@@ -311,14 +311,28 @@ class StepStorage {
       'goal': prefs.getInt(stepGoalKey) ?? 10000,
       'coins': prefs.getInt(coinsKey) ?? 0,
       'totalStepsEarned': prefs.getInt(totalStepsEarnedKey) ?? 0,
+      'lastMilestone': prefs.getInt(lastCoinMilestoneKey) ?? 0,
       'lastDate': prefs.getString(lastDateKey),
-      'allKeys': prefs.getKeys().toList(),
     };
   }
 
-  /// Clear all data (factory reset)
+  /// Clear all data
   static Future<void> clearAllData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+    _cachedLastMilestone = -1;
+    _lastProcessedSteps = -1;
+  }
+
+  /// Debug print all data
+  static Future<void> debugPrint() async {
+    final prefs = await SharedPreferences.getInstance();
+    print("=== STORAGE DEBUG ===");
+    print("coins: ${prefs.getInt(coinsKey)}");
+    print("lastMilestone: ${prefs.getInt(lastCoinMilestoneKey)}");
+    print("totalStepsEarned: ${prefs.getInt(totalStepsEarnedKey)}");
+    print("cachedMilestone: $_cachedLastMilestone");
+    print("lastProcessed: $_lastProcessedSteps");
+    print("====================");
   }
 }

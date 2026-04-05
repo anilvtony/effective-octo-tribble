@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'step_counter.dart';   // step counter screen
-import 'history_screen.dart'; // history screen file
-import 'coins_screen.dart';   // NEW: coins screen
+import 'step_counter.dart';
+import 'history_screen.dart';
+import 'coins_screen.dart';
 
 void main() {
-  runApp(const StepApp()); // start the app
+  runApp(const StepApp());
 }
 
-// Main App Widget
 class StepApp extends StatefulWidget {
   const StepApp({super.key});
 
@@ -16,20 +15,16 @@ class StepApp extends StatefulWidget {
 }
 
 class _StepAppState extends State<StepApp> {
-
-  // keeps track of selected bottom navigation tab
   int _currentIndex = 0;
 
-  // list of screens for navigation - ADDED CoinsScreen
   final List<Widget> _screens = [
     const StepCounter(),
     const HistoryScreen(),
-    const CoinsScreen(),  // NEW
+    const CoinsScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
-
     return MaterialApp(
       debugShowCheckedModeBanner: false,
 
@@ -38,19 +33,14 @@ class _StepAppState extends State<StepApp> {
       ),
 
       home: Scaffold(
-
-        // display screen based on selected tab
         body: _screens[_currentIndex],
 
-        // bottom navigation bar - ADDED Coins tab
         bottomNavigationBar: BottomNavigationBar(
-
           currentIndex: _currentIndex,
 
-          // when user taps a tab
           onTap: (index) {
             setState(() {
-              _currentIndex = index; // change screen
+              _currentIndex = index;
             });
           },
 
@@ -58,7 +48,6 @@ class _StepAppState extends State<StepApp> {
           unselectedItemColor: Colors.grey,
 
           items: const [
-
             BottomNavigationBarItem(
               icon: Icon(Icons.directions_walk),
               label: "Steps",
@@ -69,11 +58,10 @@ class _StepAppState extends State<StepApp> {
               label: "History",
             ),
 
-            BottomNavigationBarItem(  // NEW
+            BottomNavigationBarItem(
               icon: Icon(Icons.monetization_on),
               label: "Coins",
             ),
-
           ],
         ),
       ),
