@@ -13,10 +13,8 @@ class _CoinsScreenState extends State<CoinsScreen> {
   int totalCoinsEarned = 0;
   List<Map<String, dynamic>> coinHistory = [];
 
-  // Date range filter
   DateTime? fromDate;
   DateTime? toDate;
-  String filterLabel = "All Time";
 
   @override
   void initState() {
@@ -27,28 +25,49 @@ class _CoinsScreenState extends State<CoinsScreen> {
   Future<void> loadCoinsData() async {
     final data = await StepStorage.getCoinsData();
 
-    int calculatedTotal = 0;
-    List<Map<String, dynamic>> history = List<Map<String, dynamic>>.from(data['history'] ?? []);
-    for (var item in history) {
-      calculatedTotal += (item['coinsEarned'] ?? 1) as int;
+    // CRITICAL FIX: Use the actual stored coin balance as the source of truth
+    // Available coins should equal total earned on day 1 (before spending)
+    int availableCoins = data['coins'] ?? 0;
+
+    // Calculate total earned from history properly
+    int calculatedEarned = _calculateTotalFromHistory(data['history']);
+
+    // If no history but has coins, or first day, make them equal
+    if (calculatedEarned == 0 && availableCoins > 0) {
+      calculatedEarned = availableCoins;
     }
 
     setState(() {
-      coins = data['coins'] ?? 0;
-      totalCoinsEarned = calculatedTotal;
-      coinHistory = history;
+      coins = availableCoins;
+      totalCoinsEarned = calculatedEarned;
+      coinHistory = List<Map<String, dynamic>>.from(data['history'] ?? []);
     });
   }
 
-  /// Pick date range and show results in full screen
+  /// FIXED: Properly calculate total from history
+  int _calculateTotalFromHistory(List<dynamic>? history) {
+    if (history == null || history.isEmpty) return 0;
+
+    int total = 0;
+    for (var item in history) {
+      if (item is Map) {
+        // Get coinsEarned field, default to 1 for backward compatibility
+        int earned = 1;
+        if (item.containsKey('coinsEarned')) {
+          var val = item['coinsEarned'];
+          earned = (val is int) ? val : int.tryParse(val.toString()) ?? 1;
+        }
+        total += earned;
+      }
+    }
+    return total;
+  }
+
   Future<void> pickDateRange() async {
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2023),
       lastDate: DateTime.now(),
-      initialDateRange: fromDate != null && toDate != null
-          ? DateTimeRange(start: fromDate!, end: toDate!)
-          : null,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -65,13 +84,6 @@ class _CoinsScreenState extends State<CoinsScreen> {
     );
 
     if (picked != null) {
-      setState(() {
-        fromDate = picked.start;
-        toDate = picked.end;
-        filterLabel = "${formatShortDate(picked.start)} - ${formatShortDate(picked.end)}";
-      });
-
-      // Navigate to full screen results
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -79,6 +91,7 @@ class _CoinsScreenState extends State<CoinsScreen> {
             fromDate: picked.start,
             toDate: picked.end,
             coinHistory: coinHistory,
+            totalLifetimeEarned: totalCoinsEarned,
           ),
         ),
       );
@@ -103,17 +116,8 @@ class _CoinsScreenState extends State<CoinsScreen> {
     return "$hour:$minute";
   }
 
-  void clearFilter() {
-    setState(() {
-      fromDate = null;
-      toDate = null;
-      filterLabel = "All Time";
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Show recent 5 entries on main screen with time
     List<Map<String, dynamic>> recentHistory = coinHistory.length > 5
         ? coinHistory.sublist(coinHistory.length - 5)
         : coinHistory;
@@ -157,9 +161,15 @@ class _CoinsScreenState extends State<CoinsScreen> {
                 children: [
                   const Icon(Icons.monetization_on, size: 60, color: Colors.white),
                   const SizedBox(height: 15),
-                  const Text("Total Coins", style: TextStyle(fontSize: 18, color: Colors.white70)),
+                  const Text(
+                    "Available coins to spend",
+                    style: TextStyle(fontSize: 16, color: Colors.white70),
+                  ),
                   const SizedBox(height: 5),
-                  Text("$coins", style: const TextStyle(fontSize: 56, fontWeight: FontWeight.bold, color: Colors.white)),
+                  Text(
+                    "$coins",
+                    style: const TextStyle(fontSize: 56, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
                 ],
               ),
             ),
@@ -171,31 +181,87 @@ class _CoinsScreenState extends State<CoinsScreen> {
               children: [
                 Expanded(
                   child: _buildStatCard(
+                    icon: Icons.account_balance_wallet,
+                    title: "Available",
+                    value: coins.toString(),
+                    color: Colors.blue,
+                    subtitle: "To spend now",
+                  ),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: _buildStatCard(
                     icon: Icons.monetization_on,
                     title: "Total Earned",
                     value: totalCoinsEarned.toString(),
                     color: Colors.green,
+                    subtitle: "Lifetime",
                   ),
                 ),
               ],
             ),
 
+            // Show spent coins only if there's a difference
+            if (totalCoinsEarned > coins)
+              Container(
+                margin: const EdgeInsets.only(top: 15),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.shopping_cart, color: Colors.red.shade400, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      "${totalCoinsEarned - coins} coins spent",
+                      style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+
+            // DEBUG: Show if they're equal (first day)
+            if (coins == totalCoinsEarned && coins > 0)
+              Container(
+                margin: const EdgeInsets.only(top: 15),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green.shade400, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      "All coins available! Nothing spent yet.",
+                      style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+
             const SizedBox(height: 30),
 
-            /// EARNING HISTORY HEADER with DATE RANGE BUTTON
+            /// EARNING HISTORY HEADER
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Earning History", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(filterLabel, style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+                    Text("Earning History", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    SizedBox(height: 4),
+                    Text("Recent entries", style: TextStyle(fontSize: 14, color: Colors.grey)),
                   ],
                 ),
 
-                // DATE RANGE BUTTON
                 GestureDetector(
                   onTap: pickDateRange,
                   child: Container(
@@ -205,15 +271,12 @@ class _CoinsScreenState extends State<CoinsScreen> {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.amber.withOpacity(0.5)),
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.date_range, size: 16, color: Colors.amber),
-                        const SizedBox(width: 6),
-                        Text(
-                          fromDate == null ? "Select Dates" : "View Report",
-                          style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w600, fontSize: 13),
-                        ),
+                        Icon(Icons.date_range, size: 16, color: Colors.amber),
+                        SizedBox(width: 6),
+                        Text("Select Dates", style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w600, fontSize: 13)),
                       ],
                     ),
                   ),
@@ -223,7 +286,7 @@ class _CoinsScreenState extends State<CoinsScreen> {
 
             const SizedBox(height: 15),
 
-            /// RECENT HISTORY (with time) - Main Screen
+            /// RECENT HISTORY
             recentHistory.isEmpty
                 ? Container(
               padding: const EdgeInsets.all(40),
@@ -261,22 +324,18 @@ class _CoinsScreenState extends State<CoinsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("+$coinsInEntry Coin${coinsInEntry > 1 ? 's' : ''} Earned",
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            Text("+$coinsInEntry Coin${coinsInEntry > 1 ? 's' : ''} Earned", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 4),
-                            Text("Steps: ${item['stepsAtTime']}",
-                                style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                            Text("Steps: ${item['stepsAtTime']}", style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                           ],
                         ),
                       ),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(formatDate(item['date']),
-                              style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                          Text(formatDate(item['date']), style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                           if (timestamp > 0)
-                            Text(formatTime(timestamp),
-                                style: TextStyle(color: Colors.amber.shade700, fontSize: 11, fontWeight: FontWeight.w500)),
+                            Text(formatTime(timestamp), style: TextStyle(color: Colors.amber.shade700, fontSize: 11, fontWeight: FontWeight.w500)),
                         ],
                       ),
                     ],
@@ -288,7 +347,7 @@ class _CoinsScreenState extends State<CoinsScreen> {
             if (coinHistory.length > 5)
               TextButton(
                 onPressed: pickDateRange,
-                child: const Text("View All History →", style: TextStyle(color: Colors.amber)),
+                child: const Text("View Full Report →", style: TextStyle(color: Colors.amber)),
               ),
           ],
         ),
@@ -296,7 +355,13 @@ class _CoinsScreenState extends State<CoinsScreen> {
     );
   }
 
-  Widget _buildStatCard({required IconData icon, required String title, required String value, required Color color}) {
+  Widget _buildStatCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required Color color,
+    String? subtitle,
+  }) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -309,8 +374,10 @@ class _CoinsScreenState extends State<CoinsScreen> {
           Icon(icon, color: color, size: 30),
           const SizedBox(height: 10),
           Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 5),
-          Text(title, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+          const SizedBox(height: 2),
+          Text(title, style: TextStyle(color: Colors.grey.shade800, fontSize: 13, fontWeight: FontWeight.w600)),
+          if (subtitle != null)
+            Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
         ],
       ),
     );
@@ -322,12 +389,14 @@ class DateRangeResultScreen extends StatefulWidget {
   final DateTime fromDate;
   final DateTime toDate;
   final List<Map<String, dynamic>> coinHistory;
+  final int totalLifetimeEarned;
 
   const DateRangeResultScreen({
     super.key,
     required this.fromDate,
     required this.toDate,
     required this.coinHistory,
+    required this.totalLifetimeEarned,
   });
 
   @override
@@ -337,7 +406,7 @@ class DateRangeResultScreen extends StatefulWidget {
 class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
   Map<String, List<Map<String, dynamic>>> groupedByDate = {};
   Map<String, int> dailyTotals = {};
-  int grandTotal = 0;
+  int rangeTotal = 0;
   int totalDaysWithCoins = 0;
 
   @override
@@ -350,13 +419,11 @@ class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
     String fromStr = widget.fromDate.toString().split(" ")[0];
     String toStr = widget.toDate.toString().split(" ")[0];
 
-    // Filter history within date range
     List<Map<String, dynamic>> filtered = widget.coinHistory.where((item) {
       String itemDate = item['date'];
       return itemDate.compareTo(fromStr) >= 0 && itemDate.compareTo(toStr) <= 0;
     }).toList();
 
-    // Group by date
     for (var item in filtered) {
       String date = item['date'];
       if (!groupedByDate.containsKey(date)) {
@@ -367,11 +434,9 @@ class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
       dailyTotals[date] = dailyTotals[date]! + (item['coinsEarned'] ?? 1) as int;
     }
 
-    // Calculate totals
-    grandTotal = dailyTotals.values.fold(0, (sum, val) => sum + val);
+    rangeTotal = dailyTotals.values.fold(0, (sum, val) => sum + val);
     totalDaysWithCoins = groupedByDate.length;
 
-    // Sort dates descending
     groupedByDate = Map.fromEntries(
       groupedByDate.entries.toList()..sort((a, b) => b.key.compareTo(a.key)),
     );
@@ -430,12 +495,13 @@ class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
             child: Column(
               children: [
                 Text(formatShortDateRange(), style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                const SizedBox(height: 10),
+                const SizedBox(height: 15),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildSummaryItem("Total Coins", grandTotal.toString(), Icons.monetization_on),
+                    _buildSummaryItem("In This Range", rangeTotal.toString(), Icons.date_range),
                     _buildSummaryItem("Active Days", totalDaysWithCoins.toString(), Icons.calendar_today),
+                    _buildSummaryItem("Lifetime Total", widget.totalLifetimeEarned.toString(), Icons.monetization_on),
                   ],
                 ),
               ],
@@ -451,8 +517,7 @@ class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
                 children: [
                   Icon(Icons.search_off, size: 80, color: Colors.grey.shade400),
                   const SizedBox(height: 20),
-                  Text("No coins earned in this period",
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 18)),
+                  Text("No coins earned in this period", style: TextStyle(color: Colors.grey.shade600, fontSize: 18)),
                 ],
               ),
             )
@@ -467,7 +532,6 @@ class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // DATE HEADER with daily total
                     Container(
                       margin: const EdgeInsets.only(top: 10, bottom: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -480,32 +544,20 @@ class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
                         children: [
                           Text(
                             formatDate(date),
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.amber.shade900,
-                            ),
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
                           ),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.amber,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
+                            decoration: BoxDecoration(color: Colors.amber, borderRadius: BorderRadius.circular(20)),
                             child: Text(
                               "$dayTotal coin${dayTotal > 1 ? 's' : ''}",
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                             ),
                           ),
                         ],
                       ),
                     ),
 
-                    // ENTRIES FOR THIS DAY (with time)
                     ...entries.reversed.map((item) {
                       int coinsInEntry = item['coinsEarned'] ?? 1;
                       int timestamp = item['timestamp'] ?? 0;
@@ -522,10 +574,7 @@ class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
                           children: [
                             Container(
                               padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.amber.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
+                              decoration: BoxDecoration(color: Colors.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
                               child: const Icon(Icons.add, color: Colors.amber, size: 16),
                             ),
                             const SizedBox(width: 12),
@@ -533,27 +582,18 @@ class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text("+$coinsInEntry coin${coinsInEntry > 1 ? 's' : ''}",
-                                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                                  Text("At ${item['stepsAtTime']} steps",
-                                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                  Text("+$coinsInEntry coin${coinsInEntry > 1 ? 's' : ''}", style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  Text("At ${item['stepsAtTime']} steps", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                                 ],
                               ),
                             ),
                             if (timestamp > 0)
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
+                                decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
                                 child: Text(
                                   formatTime(timestamp),
-                                  style: TextStyle(
-                                    color: Colors.grey.shade700,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                  style: TextStyle(color: Colors.grey.shade700, fontSize: 11, fontWeight: FontWeight.w500),
                                 ),
                               ),
                           ],
@@ -575,11 +615,11 @@ class _DateRangeResultScreenState extends State<DateRangeResultScreen> {
   Widget _buildSummaryItem(String label, String value, IconData icon) {
     return Column(
       children: [
-        Icon(icon, color: Colors.white, size: 28),
+        Icon(icon, color: Colors.white, size: 24),
         const SizedBox(height: 5),
-        Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+        Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
       ],
     );
   }
