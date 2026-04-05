@@ -620,7 +620,7 @@ class _CoinsScreenState extends State<CoinsScreen> {
                           ),
                           if (isAdButtonEnabled)
                             Text(
-                              "Ad ${adsWatchedToday + 1} today • +10 COINS",
+                              "${adsWatchedToday + 1} Ads watched today • Earn +10 COINS",
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 12,
@@ -628,7 +628,7 @@ class _CoinsScreenState extends State<CoinsScreen> {
                             ),
                         ],
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 13),
                       Icon(Icons.monetization_on, color: Colors.amber, size: 28),
                     ],
                   ),
