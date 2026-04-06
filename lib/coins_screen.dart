@@ -69,13 +69,20 @@ class _CoinsScreenState extends State<CoinsScreen> {
   }
 
   // ⏱️ Calculate required cooldown based on ads watched
+  // ⏱️ Calculate required cooldown based on ads watched
   int getRequiredCooldownSeconds() {
     if (adsWatchedToday < 3) {
-      return 30; // First 3 ads: 30-60 sec gap (using 30)
+      return 30; // First 3 ads: 30 sec gap
     } else if (adsWatchedToday < 6) {
       return 120; // Next 3 ads (4-6): 2 min gap
+    } else if (adsWatchedToday < 20) {
+      return 300; // After 6 ads until 20: 5 min gap
+    } else if (adsWatchedToday < 30) {
+      return 600; // After 20 ads until 30: 10 min gap
+    } else if (adsWatchedToday < 40) {
+      return 1200; // After 30 ads until 40: 20 min gap
     } else {
-      return 300; // After 6 ads: 5 min gap
+      return 1800; // After 40 ads: 30 min gap
     }
   }
 
@@ -640,8 +647,8 @@ class _CoinsScreenState extends State<CoinsScreen> {
             Center(
               child: Text(
                 isAdButtonEnabled
-                    ? "💡 ${adsWatchedToday < 3 ? 'First 3 ads: 30 sec gap' : adsWatchedToday < 6 ? 'Next 3 ads: 2 min gap' : 'After 6 ads: 5 min gap'} • Resets at 12 AM"
-                    : "⏱️ Please wait before watching next ad",
+                    ? "💡 ${adsWatchedToday < 3 ? 'First 3 ads: 30 sec gap' : adsWatchedToday < 6 ? 'Next 3 ads: 2 min gap' : adsWatchedToday < 20 ? 'After 6 ads: 5 min gap' : adsWatchedToday < 30 ? 'After 20 ads: 10 min gap' : adsWatchedToday < 40 ? 'After 30 ads: 20 min gap' : 'After 40 ads: 30 min gap'} • Resets at 12 AM"
+                    : "⏱️ Button will appear when ready",
                 style: TextStyle(
                   color: Colors.grey.shade600,
                   fontSize: 12,
